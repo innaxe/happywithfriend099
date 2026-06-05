@@ -240,7 +240,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
           className="row"
           style={{ gap: 6, margin: "0 0 12px", fontSize: 11.5, color: "var(--rose)" }}
         >
-          <Icon name="info" size={13} /> อ่านยอดจากสลิปไม่ได้ — ลองแนบสลิปที่ชัดกว่านี้
+          <Icon name="info" size={13} /> อ่านยอดอัตโนมัติไม่สำเร็จ — ลองแนบอีกครั้ง
         </div>
       ) : null}
 
