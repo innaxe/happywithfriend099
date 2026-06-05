@@ -1,7 +1,14 @@
 // แจ้งเตือนเข้า Discord ผ่าน webhook (โพสต์จาก client ตรงไป Discord — รองรับ CORS)
 import type { Goal, Person } from "./types";
 import { money, ymLabel, tallies } from "./calc";
-import { WEBHOOK_KEY } from "./constants";
+
+/** Webhook แยกตามห้อง Discord — ออมเงิน vs ไดอารี่ (เก็บใน localStorage ต่อเครื่อง) */
+export type Hook = "savings" | "diary";
+const HOOK_KEY: Record<Hook, string> = {
+  savings: "discord_webhook_savings_v1",
+  diary: "discord_webhook_diary_v1",
+};
+const LEGACY_KEY = "discord_webhook_v1"; // ของเดิม key เดียว → ใช้ต่อกับ "savings"
 
 /** แปลงสีธีม hex ของเป้า → ตัวเลขสีของ Discord embed */
 function embedColor(accent: string): number {
@@ -17,9 +24,12 @@ function dispName(people: Person[], nick: string): string {
   return people.find((p) => p.nick === nick)?.real || nick;
 }
 
-/** ยิง payload เข้า webhook ปัจจุบัน (เงียบถ้าไม่มี url หรือ error) */
-async function post(body: Record<string, unknown>): Promise<boolean> {
-  const url = getWebhook();
+/** ยิง payload เข้า webhook ของห้องที่ระบุ (เงียบถ้าไม่มี url หรือ error) */
+async function post(
+  body: Record<string, unknown>,
+  kind: Hook,
+): Promise<boolean> {
+  const url = getWebhook(kind);
   if (!url) return false;
   try {
     const res = await fetch(url, {
@@ -33,15 +43,18 @@ async function post(body: Record<string, unknown>): Promise<boolean> {
   }
 }
 
-export function getWebhook(): string {
+export function getWebhook(kind: Hook): string {
   if (typeof window === "undefined") return "";
-  return localStorage.getItem(WEBHOOK_KEY) ?? "";
+  const v = localStorage.getItem(HOOK_KEY[kind]) ?? "";
+  // เผื่อของเดิมที่เคยตั้ง webhook ตัวเดียว → ใช้เป็นห้อง "ออมเงิน"
+  if (!v && kind === "savings") return localStorage.getItem(LEGACY_KEY) ?? "";
+  return v;
 }
 
-export function setWebhook(url: string): void {
+export function setWebhook(kind: Hook, url: string): void {
   if (typeof window === "undefined") return;
-  if (url) localStorage.setItem(WEBHOOK_KEY, url);
-  else localStorage.removeItem(WEBHOOK_KEY);
+  if (url) localStorage.setItem(HOOK_KEY[kind], url);
+  else localStorage.removeItem(HOOK_KEY[kind]);
 }
 
 interface NotifyPayload {
@@ -61,8 +74,7 @@ export async function notifyDiscord(
   c: NotifyPayload,
   slipUrl: string,
 ): Promise<void> {
-  const url = getWebhook();
-  if (!url) return;
+  if (!getWebhook("savings")) return;
 
   const { saved } = tallies(goal);
   const target = goal.target || 1;
@@ -105,36 +117,59 @@ export async function notifyDiscord(
     timestamp: new Date().toISOString(),
   };
   if (slipUrl) embed.image = { url: slipUrl };
-
-  try {
-    await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "เป้าเงิน", embeds: [embed] }),
-    });
-  } catch {
-    // เงียบไว้ — แจ้งเตือนล้มเหลวไม่ควรทำให้การบันทึกล้ม
-  }
+  await post({ embeds: [embed] }, "savings"); // → ห้องประวัติออมเงิน
 }
 
-/** แจ้ง Discord เมื่อมีโพสต์ไดอารี่ใหม่ (เล่าว่าไปไหนทำอะไร + รูป) */
+/**
+ * โพสต์ไดอารี่ → ส่งเข้าห้องไดอารี่แบบ "ข้อความแชทปกติ"
+ * (โปรไฟล์ = รูป+ชื่อของคนโพสต์ · ข้อความตรง ๆ · รูปเป็นไฟล์แนบจริง)
+ */
 export async function notifyUpdate(
-  goal: Goal,
   people: Person[],
   author: string,
   text: string,
   imageUrl: string,
 ): Promise<void> {
-  const embed: Record<string, unknown> = {
-    title: "📝 " + dispName(people, author) + " อัพเดทไดอารี่กลุ่ม",
-    color: embedColor(goal.accent),
-    description:
-      (goal.emoji || "🎯") + " " + goal.name + (text ? "\n\n" + text : ""),
-    footer: { text: "เป้าเงิน · ไดอารี่กลุ่ม" },
-    timestamp: new Date().toISOString(),
-  };
-  if (imageUrl) embed.image = { url: imageUrl };
-  await post({ embeds: [embed] });
+  const url = getWebhook("diary");
+  if (!url) return;
+
+  const username = (dispName(people, author) || "สมาชิก").slice(0, 80);
+  const avatarUrl = people.find((p) => p.nick === author)?.avatar_url || undefined;
+  const content = text || "";
+
+  // มีรูป → พยายามอัปเป็นไฟล์แนบจริง (ดูเหมือนแชทส่งรูป ไม่มีกล่อง embed)
+  if (imageUrl) {
+    try {
+      const blob = await (await fetch(imageUrl)).blob();
+      const ext = blob.type.includes("png") ? "png" : "jpg";
+      const form = new FormData();
+      form.append(
+        "payload_json",
+        JSON.stringify({ username, avatar_url: avatarUrl, content }),
+      );
+      form.append("files[0]", blob, "photo." + ext);
+      const r = await fetch(url, { method: "POST", body: form });
+      if (r.ok) return;
+    } catch {
+      // ดึงรูปไม่ได้ → ตกไปแนบลิงก์รูปท้ายข้อความแทน
+    }
+  }
+
+  const finalContent = imageUrl
+    ? content
+      ? content + "\n" + imageUrl
+      : imageUrl
+    : content;
+  if (!finalContent) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, avatar_url: avatarUrl, content: finalContent }),
+    });
+  } catch {
+    // เงียบ — แจ้งเตือนล้มเหลวไม่ควรทำให้การโพสต์ล้ม
+  }
 }
 
 /** แจ้ง Discord เมื่อยอดสะสมแตะหมุดหมาย (25/50/75/100%) */
@@ -163,7 +198,7 @@ export async function notifyMilestone(
     footer: { text: "เป้าเงิน" },
     timestamp: new Date().toISOString(),
   };
-  await post({ embeds: [embed] });
+  await post({ embeds: [embed] }, "savings"); // → ห้องประวัติออมเงิน
 }
 
 /** เตือนใน Discord ว่าใครยังไม่โอนเดือนนี้ */
@@ -187,32 +222,23 @@ export async function notifyNudge(
     footer: { text: "เป้าเงิน" },
     timestamp: new Date().toISOString(),
   };
-  return post({ embeds: [embed] });
+  return post({ embeds: [embed] }, "savings"); // → ห้องประวัติออมเงิน
 }
 
-/** ยิง embed ทดสอบเข้า webhook ปัจจุบัน (ปุ่ม "ทดสอบส่งแจ้งเตือน") */
-export async function sendDiscordTest(): Promise<boolean> {
-  const url = getWebhook();
-  if (!url) return false;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: "เป้าเงิน",
-        embeds: [
-          {
-            title: "🔔 ทดสอบแจ้งเตือน",
-            description:
-              "การเชื่อมต่อ Discord ทำงานปกติ — เพื่อน ๆ จะได้รับแจ้งเตือนทุกครั้งที่มีคนบันทึกการออม",
-            color: 24432,
-            footer: { text: "เป้าเงิน" },
-          },
-        ],
-      }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+/** ยิง embed ทดสอบเข้า webhook ของห้องที่เลือก (ปุ่ม "ทดสอบ") */
+export async function sendDiscordTest(kind: Hook): Promise<boolean> {
+  const label = kind === "diary" ? "ไดอารี่กลุ่ม" : "ประวัติการออม";
+  return post(
+    {
+      embeds: [
+        {
+          title: "🔔 ทดสอบ — " + label,
+          description: "เชื่อมต่อ Discord ห้องนี้สำเร็จ ✅ การแจ้งเตือนจะเข้าห้องนี้",
+          color: 24432,
+          footer: { text: "เป้าเงิน" },
+        },
+      ],
+    },
+    kind,
+  );
 }

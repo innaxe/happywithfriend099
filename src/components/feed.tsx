@@ -197,6 +197,7 @@ function Composer() {
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false); // กันกดโพสต์ซ้ำเร็ว ๆ แล้วได้ 2 โพสต์
 
   function pickFile(f: File | null) {
     setFileName(f?.name ?? "");
@@ -205,12 +206,18 @@ function Composer() {
   }
 
   async function submit() {
-    const file = fileRef.current?.files?.[0] ?? null;
-    const ok = await addUpdate({ text, file });
-    if (ok) {
-      setText("");
-      pickFile(null);
-      if (fileRef.current) fileRef.current.value = "";
+    if (submitting.current) return;
+    submitting.current = true;
+    try {
+      const file = fileRef.current?.files?.[0] ?? null;
+      const ok = await addUpdate({ text, file });
+      if (ok) {
+        setText("");
+        pickFile(null);
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    } finally {
+      submitting.current = false;
     }
   }
 

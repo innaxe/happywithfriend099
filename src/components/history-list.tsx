@@ -8,8 +8,9 @@ import { SectionHead } from "./primitives";
 import { Icon } from "./icon";
 
 export function Activity({ goal }: { goal: Goal }) {
-  const { deleteContribution } = usePao();
+  const { deleteContribution, setEditingContribution } = usePao();
   const [all, setAll] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   const sorted = [...goal.contributions].sort((a, b) => {
     const ta = a.created_at ? Date.parse(a.created_at) : 0;
@@ -53,26 +54,31 @@ export function Activity({ goal }: { goal: Goal }) {
                   {(x.name || "?").slice(0, 1)}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="row" style={{ gap: 6 }}>
+                  <div className="row" style={{ gap: 7 }}>
                     <span style={{ fontSize: 13.5, fontWeight: 650 }}>{x.name}</span>
                     {x.slip_url ? (
-                      <a
-                        href={x.slip_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="row"
+                      <button
+                        onClick={() => setLightbox(x.slip_url)}
+                        aria-label="ดูสลิป"
                         style={{
-                          gap: 3,
-                          fontSize: 10.5,
-                          fontWeight: 600,
-                          color: "var(--accent-ink)",
-                          background: "var(--accent-soft)",
-                          padding: "1px 6px",
-                          borderRadius: 999,
+                          width: 22,
+                          height: 22,
+                          borderRadius: 6,
+                          overflow: "hidden",
+                          flex: "0 0 auto",
+                          border: "1px solid var(--border-strong)",
+                          padding: 0,
+                          lineHeight: 0,
                         }}
                       >
-                        <Icon name="receipt" size={11} /> สลิป
-                      </a>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={x.slip_url}
+                          alt=""
+                          loading="lazy"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      </button>
                     ) : (
                       <span
                         className="row"
@@ -105,15 +111,18 @@ export function Activity({ goal }: { goal: Goal }) {
                 </div>
                 <span
                   className="num"
-                  style={{
-                    fontSize: 14.5,
-                    fontWeight: 750,
-                    color: "var(--accent-ink)",
-                    flex: "0 0 auto",
-                  }}
+                  style={{ fontSize: 14.5, fontWeight: 750, color: "var(--accent-ink)", flex: "0 0 auto" }}
                 >
                   +{money(x.amount, goal.currency)}
                 </span>
+                <button
+                  className="iconbtn"
+                  style={{ width: 28, height: 28, color: "var(--muted-2)", flex: "0 0 auto" }}
+                  onClick={() => setEditingContribution(x)}
+                  aria-label="แก้ไขรายการ"
+                >
+                  <Icon name="pencilSm" size={15} />
+                </button>
                 <button
                   className="iconbtn"
                   style={{ width: 28, height: 28, color: "var(--muted-2)", flex: "0 0 auto" }}
@@ -127,6 +136,48 @@ export function Activity({ goal }: { goal: Goal }) {
           })
         )}
       </div>
+
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 90,
+            background: "rgba(15,23,42,.85)",
+            display: "grid",
+            placeItems: "center",
+            padding: 20,
+            animation: "fade .2s ease",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt="สลิปโอนเงิน"
+            style={{ maxWidth: "100%", maxHeight: "88vh", borderRadius: 12, objectFit: "contain" }}
+          />
+          <button
+            aria-label="ปิด"
+            style={{
+              position: "fixed",
+              top: 16,
+              right: 16,
+              width: 38,
+              height: 38,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,.15)",
+              color: "#fff",
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            <Icon name="x" size={20} sw={2.2} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { StatChips } from "./stat-chips";
 import { NudgeBanner } from "./nudge-banner";
 import { ContributionForm } from "./contribution-form";
 import { MemberCards } from "./member-cards";
+import { SettleUp } from "./settle-up";
 import { ChartCard } from "./savings-chart";
 import { MonthTable } from "./monthly-grid";
 import { Activity } from "./history-list";
@@ -21,6 +22,7 @@ import { BusyIndicator } from "./busy-indicator";
 import { GoalEditor } from "./dialogs/goal-editor";
 import { PeopleDialog } from "./dialogs/people-dialog";
 import { ShareDialog } from "./dialogs/share-dialog";
+import { EditContributionDialog } from "./dialogs/edit-contribution";
 import { Icon, type IconName } from "./icon";
 
 type Tab = "home" | "feed";
@@ -35,6 +37,7 @@ function DashContent({ goal }: { goal: Goal }) {
       {!solo && <NudgeBanner goal={goal} />}
       <ContributionForm key={goal.id} goal={goal} />
       {!solo && <MemberCards goal={goal} />}
+      {!solo && <SettleUp goal={goal} />}
       <ChartCard goal={goal} />
       <MonthTable goal={goal} />
       <Activity goal={goal} />
@@ -173,6 +176,7 @@ export function Dashboard() {
       <GoalEditor />
       <PeopleDialog />
       <ShareDialog />
+      <EditContributionDialog />
       <Celebrate />
       <ToastHost />
       <BusyIndicator />

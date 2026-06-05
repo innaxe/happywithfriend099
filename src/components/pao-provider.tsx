@@ -115,6 +115,13 @@ interface PaoContextValue {
   reload: (preferActiveId?: string) => Promise<LoadedData>;
   addContribution: (input: AddContributionInput) => Promise<boolean>;
   deleteContribution: (id: string) => Promise<void>;
+  updateContribution: (
+    id: string,
+    fields: { name: string; month: string; amount: number; note: string },
+  ) => Promise<void>;
+  // แก้ไขรายการ (dialog)
+  editingContribution: Contribution | null;
+  setEditingContribution: (c: Contribution | null) => void;
   // ไดอารี่กลุ่ม
   addUpdate: (input: AddUpdateInput) => Promise<boolean>;
   deleteUpdate: (id: string) => Promise<void>;
@@ -256,6 +263,8 @@ export function PaoProvider({
   });
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [editingContribution, setEditingContribution] =
+    useState<Contribution | null>(null);
 
   // ===== toast =====
   const toastSeq = useRef(0);
@@ -492,6 +501,35 @@ export function PaoProvider({
     [reload, showToast],
   );
 
+  // แก้ไขยอด/เดือน/หมายเหตุ/ผู้โอน ของรายการเดิม (ไม่ยิง Discord ซ้ำ)
+  const updateContribution = useCallback(
+    async (
+      id: string,
+      fields: { name: string; month: string; amount: number; note: string },
+    ) => {
+      setBusy(true);
+      try {
+        const r = await supabase
+          .from("contributions")
+          .update({
+            name: fields.name,
+            month: fields.month,
+            amount: fields.amount,
+            note: fields.note,
+          })
+          .eq("id", id);
+        if (r.error) throw r.error;
+        setEditingContribution(null);
+        await reload();
+        showToast("แก้ไขรายการแล้ว");
+      } catch (e) {
+        showToast("แก้ไขไม่สำเร็จ: " + errMsg(e), "error");
+      }
+      setBusy(false);
+    },
+    [reload, showToast],
+  );
+
   const saveGoal = useCallback(
     async (draft: GoalDraft, editingId: string | null) => {
       const row = {
@@ -665,7 +703,7 @@ export function PaoProvider({
           .single();
         if (ins.error) throw ins.error;
         await reload(g.id);
-        void notifyUpdate(g, people, author, text, imageUrl);
+        void notifyUpdate(people, author, text, imageUrl);
         showToast("โพสต์แล้ว · เพื่อน ๆ เห็นทันที");
         ok = true;
       } catch (e) {
@@ -763,8 +801,8 @@ export function PaoProvider({
       showToast("เดือนนี้ทุกคนโอนครบแล้ว 🎉");
       return;
     }
-    if (!getWebhook()) {
-      showToast("ตั้ง Discord Webhook ก่อน (เมนูตั้งค่า)", "error");
+    if (!getWebhook("savings")) {
+      showToast("ตั้ง Discord Webhook (ออมเงิน) ก่อน ในเมนูตั้งค่า", "error");
       return;
     }
     const ok = await notifyNudge(g, people, unpaid);
@@ -803,6 +841,9 @@ export function PaoProvider({
     reload,
     addContribution,
     deleteContribution,
+    updateContribution,
+    editingContribution,
+    setEditingContribution,
     addUpdate,
     deleteUpdate,
     toggleReaction,

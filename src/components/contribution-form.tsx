@@ -2,7 +2,15 @@
 
 import { useRef, useState } from "react";
 import { usePao } from "./pao-provider";
-import { clampMonth, colorForNick, isSolo, monthsList, nowYM, ymLabel } from "@/lib/calc";
+import {
+  clampMonth,
+  colorForNick,
+  deriveGoalStats,
+  isSolo,
+  monthsList,
+  nowYM,
+  ymLabel,
+} from "@/lib/calc";
 import type { Goal } from "@/lib/types";
 import { Avatar } from "./primitives";
 import { Select } from "./select";
@@ -20,6 +28,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
   const [note, setNote] = useState("");
   const [fileName, setFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false); // กันกดซ้ำเร็ว ๆ แล้วลงเบิ้ล
 
   const safeWho =
     !solo && goal.members.length && !goal.members.includes(who)
@@ -27,22 +36,30 @@ export function ContributionForm({ goal }: { goal: Goal }) {
       : who;
   const numAmt = Number(amt.replace(/,/g, ""));
   const valid = !!amt && numAmt > 0;
+  // เตือนเบา ๆ ถ้ายอดสูงผิดปกติ (เช่นพิมพ์ 35,000 แทน 3,500) — ไม่บล็อกการบันทึก
+  const planPer = deriveGoalStats(goal).planPer;
+  const highAmount = valid && planPer > 0 && numAmt > planPer * 5;
 
   async function submit() {
-    if (!valid || busy) return;
-    const file = fileRef.current?.files?.[0] ?? null;
-    const ok = await addContribution({
-      name: safeWho,
-      month,
-      amount: String(numAmt),
-      note,
-      file,
-    });
-    if (ok) {
-      setAmt("");
-      setNote("");
-      setFileName("");
-      if (fileRef.current) fileRef.current.value = "";
+    if (!valid || busy || submitting.current) return;
+    submitting.current = true;
+    try {
+      const file = fileRef.current?.files?.[0] ?? null;
+      const ok = await addContribution({
+        name: safeWho,
+        month,
+        amount: String(numAmt),
+        note,
+        file,
+      });
+      if (ok) {
+        setAmt("");
+        setNote("");
+        setFileName("");
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    } finally {
+      submitting.current = false;
     }
   }
 
@@ -139,6 +156,15 @@ export function ContributionForm({ goal }: { goal: Goal }) {
           </div>
         </div>
       </div>
+
+      {highAmount && (
+        <div
+          className="row"
+          style={{ gap: 6, margin: "-2px 0 12px", fontSize: 11.5, color: "var(--amber)" }}
+        >
+          <Icon name="info" size={13} /> ยอดสูงกว่าปกติ — เช็กอีกครั้งว่าถูกไหม
+        </div>
+      )}
 
       <label className="field-label">หมายเหตุ</label>
       <input

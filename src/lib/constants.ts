@@ -1,8 +1,5 @@
 // ค่าคงที่
 
-/** key ที่เก็บ Discord webhook ใน localStorage (ต่อเครื่อง) */
-export const WEBHOOK_KEY = "discord_webhook_v1";
-
 /** อิโมจิรีแอกชันสำหรับไดอารี่กลุ่ม */
 export const REACTIONS = ["❤️", "🔥", "🎉", "👏", "😮", "💪"];
 

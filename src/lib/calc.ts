@@ -205,6 +205,42 @@ export function monthlySummary(g: Goal): MonthRow[] {
   return rows.reverse();
 }
 
+export interface SettleRow {
+  nick: string;
+  paid: number; // ยอดที่คนนี้ลงไปแล้ว
+  balance: number; // เทียบค่าเฉลี่ยกลุ่ม: + = จ่ายเกิน, - = ค้าง
+}
+export interface SettleUp {
+  rows: SettleRow[]; // เรียงจากจ่ายเกินมากสุด → ค้างมากสุด
+  fairShare: number; // ยอดเฉลี่ยต่อคน (= ยอดรวมที่ลงแล้ว / จำนวนคน)
+  saved: number;
+  spread: number; // ช่วงห่างมากสุด-น้อยสุด (ใช้ตัดสินว่าจะโชว์ไหม)
+}
+
+/**
+ * สรุป "ใครลงเกิน/ลงน้อยกว่ากัน" แบบหารเท่า (ผลรวม balance = 0)
+ * ใช้ตอนจะปิดทริป: คนที่ balance ติดลบควรโอนเพิ่ม/โอนคืนให้คนที่บวก
+ * - คิดจากยอดที่ลงแล้วจริง (ไม่ใช่เป้า) → มีความหมายเสมอแม้ยังไม่ถึงเป้า
+ */
+export function settleUp(g: Goal): SettleUp {
+  const members = g.members.length ? g.members : ["ฉัน"];
+  const { by, saved } = tallies(g);
+  const memCount = Math.max(1, members.length);
+  const fairShare = saved / memCount;
+  const rows: SettleRow[] = members
+    .map((nick) => ({
+      nick,
+      paid: by[nick] ?? 0,
+      balance: (by[nick] ?? 0) - fairShare,
+    }))
+    .sort((a, b) => b.balance - a.balance);
+  const balances = rows.map((r) => r.balance);
+  const spread = balances.length
+    ? Math.max(...balances) - Math.min(...balances)
+    : 0;
+  return { rows, fairShare, saved, spread };
+}
+
 export interface MMCell {
   ym: string;
   amount: number; // ยอดที่คนนี้โอนในเดือนนี้

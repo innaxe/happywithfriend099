@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePao } from "../pao-provider";
-import { getWebhook, sendDiscordTest, setWebhook } from "@/lib/discord";
+import { getWebhook, sendDiscordTest, setWebhook, type Hook } from "@/lib/discord";
 import { Sheet } from "../sheet";
 import { Icon } from "../icon";
 
@@ -17,16 +17,17 @@ export function ShareDialog() {
 
 function SettingsBody() {
   const { logout, showToast } = usePao();
-  const [hook, setHook] = useState<string>(() => getWebhook());
+  const [savingsHook, setSavingsHook] = useState<string>(() => getWebhook("savings"));
+  const [diaryHook, setDiaryHook] = useState<string>(() => getWebhook("diary"));
+  const [testing, setTesting] = useState<Hook | null>(null);
   const [copied, setCopied] = useState(false);
-  const [testing, setTesting] = useState(false);
 
   const link =
     typeof window !== "undefined" ? window.location.origin : "paongern.app";
 
-  function onHookChange(v: string) {
-    setHook(v);
-    setWebhook(v.trim());
+  function onHookChange(kind: Hook, v: string, set: (s: string) => void) {
+    set(v);
+    setWebhook(kind, v.trim());
   }
 
   async function copy() {
@@ -39,16 +40,16 @@ function SettingsBody() {
     }
   }
 
-  async function test() {
-    if (!hook.trim()) {
-      showToast("ใส่ Discord Webhook ก่อน", "error");
+  async function test(kind: Hook, value: string) {
+    if (!value.trim()) {
+      showToast("ใส่ Discord Webhook ของห้องนี้ก่อน", "error");
       return;
     }
-    setTesting(true);
-    const ok = await sendDiscordTest();
-    setTesting(false);
+    setTesting(kind);
+    const ok = await sendDiscordTest(kind);
+    setTesting(null);
     showToast(
-      ok ? "ส่งทดสอบแล้ว — เช็คใน Discord ได้เลย" : "ส่งไม่สำเร็จ ตรวจ URL อีกครั้ง",
+      ok ? "ส่งทดสอบแล้ว — เช็คในห้อง Discord ได้เลย" : "ส่งไม่สำเร็จ ตรวจ URL อีกครั้ง",
       ok ? "success" : "error",
     );
   }
@@ -80,14 +81,6 @@ function SettingsBody() {
         </button>
       </div>
 
-      <label className="field-label">Discord Webhook</label>
-      <input
-        className="input"
-        value={hook}
-        onChange={(e) => onHookChange(e.target.value)}
-        placeholder="https://discord.com/api/webhooks/..."
-        style={{ marginBottom: 8, fontSize: 13.5 }}
-      />
       <div
         style={{
           display: "flex",
@@ -97,27 +90,41 @@ function SettingsBody() {
           border: "1px solid var(--accent-soft-2)",
           borderRadius: 12,
           padding: "11px 13px",
-          marginBottom: 8,
+          marginBottom: 16,
         }}
       >
         <span style={{ color: "var(--accent)", flex: "0 0 auto", marginTop: 1 }}>
           <Icon name="info" size={16} />
         </span>
-        <span style={{ fontSize: 12.5, lineHeight: 1.5, color: "var(--accent-ink)" }}>
-          ส่งแจ้งเตือนเข้า Discord ทุกครั้งที่มีคนบันทึกการออม — เพื่อน ๆ จะได้เห็นพร้อมกัน
-          (ตั้งครั้งเดียวต่อเครื่อง)
+        <span style={{ fontSize: 12.5, lineHeight: 1.55, color: "var(--accent-ink)" }}>
+          แยกแจ้งเตือนเป็น 2 ห้อง — <b>บันทึกการออม</b> เข้าห้องประวัติ ·{" "}
+          <b>โพสต์ไดอารี่</b> เข้าห้องไดอารี่ (วาง Webhook ของแต่ละห้อง)
+          <br />
+          <span style={{ color: "var(--muted)", fontSize: 11.5 }}>
+            ⚠️ เก็บไว้เฉพาะเครื่องนี้ — เปลี่ยนเครื่อง/เบราว์เซอร์ต้องตั้งใหม่
+          </span>
         </span>
       </div>
-      <button
-        className="btn btn-ghost btn-block"
-        style={{ marginBottom: 20 }}
-        disabled={testing}
-        onClick={test}
-      >
-        <Icon name="bell" size={17} /> {testing ? "กำลังส่ง…" : "ทดสอบส่งแจ้งเตือน"}
-      </button>
 
-      <hr className="hr" style={{ margin: "4px 0 16px" }} />
+      <WebhookField
+        title="Webhook — ออมเงิน (เข้าห้องประวัติการออม)"
+        channel="ห้องออมเงิน"
+        value={savingsHook}
+        onChange={(v) => onHookChange("savings", v, setSavingsHook)}
+        onTest={() => test("savings", savingsHook)}
+        busy={testing === "savings"}
+      />
+
+      <WebhookField
+        title="Webhook — ไดอารี่ (เข้าห้องไดอารี่)"
+        channel="ห้องไดอารี่"
+        value={diaryHook}
+        onChange={(v) => onHookChange("diary", v, setDiaryHook)}
+        onTest={() => test("diary", diaryHook)}
+        busy={testing === "diary"}
+      />
+
+      <hr className="hr" style={{ margin: "6px 0 16px" }} />
 
       <button
         className="btn btn-block"
@@ -130,5 +137,42 @@ function SettingsBody() {
         เป้าเงิน · เวอร์ชัน 2.0 · ล็อกอินด้วย Discord
       </div>
     </>
+  );
+}
+
+/** ช่องกรอก Webhook 1 ห้อง + ปุ่มทดสอบ */
+function WebhookField({
+  title,
+  channel,
+  value,
+  onChange,
+  onTest,
+  busy,
+}: {
+  title: string;
+  channel: string;
+  value: string;
+  onChange: (v: string) => void;
+  onTest: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label className="field-label">{title}</label>
+      <input
+        className="input"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="https://discord.com/api/webhooks/..."
+        style={{ marginBottom: 8, fontSize: 13.5 }}
+      />
+      <button
+        className="btn btn-ghost btn-block"
+        disabled={busy}
+        onClick={onTest}
+      >
+        <Icon name="bell" size={16} /> {busy ? "กำลังส่ง…" : "ทดสอบส่งเข้า " + channel}
+      </button>
+    </div>
   );
 }
