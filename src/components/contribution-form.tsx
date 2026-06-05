@@ -11,6 +11,7 @@ import {
   nowYM,
   ymLabel,
 } from "@/lib/calc";
+import { compressImage } from "@/lib/image";
 import type { Goal } from "@/lib/types";
 import { Avatar } from "./primitives";
 import { Select } from "./select";
@@ -27,8 +28,28 @@ export function ContributionForm({ goal }: { goal: Goal }) {
   const [amt, setAmt] = useState("");
   const [note, setNote] = useState("");
   const [fileName, setFileName] = useState("");
+  const [reading, setReading] = useState(false); // กำลังอ่านยอดจากสลิป
   const fileRef = useRef<HTMLInputElement>(null);
   const submitting = useRef(false); // กันกดซ้ำเร็ว ๆ แล้วลงเบิ้ล
+
+  // แนบสลิปแล้วลองอ่านยอดอัตโนมัติด้วย Gemini (ถ้าตั้งคีย์ไว้) — แก้เองได้เสมอ
+  async function readSlip(file: File) {
+    setReading(true);
+    try {
+      const img = await compressImage(file);
+      const fd = new FormData();
+      fd.append("file", img);
+      const res = await fetch("/api/read-slip", { method: "POST", body: fd });
+      if (res.ok) {
+        const data = (await res.json()) as { amount?: number | null };
+        if (data.amount && data.amount > 0) setAmt(String(data.amount));
+      }
+    } catch {
+      // เงียบไว้ — อ่านไม่ได้ก็พิมพ์ยอดเองตามปกติ
+    } finally {
+      setReading(false);
+    }
+  }
 
   const safeWho =
     !solo && goal.members.length && !goal.members.includes(who)
@@ -180,7 +201,11 @@ export function ContributionForm({ goal }: { goal: Goal }) {
         type="file"
         accept="image/*"
         hidden
-        onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
+        onChange={(e) => {
+          const f = e.target.files?.[0] ?? null;
+          setFileName(f?.name ?? "");
+          if (f) void readSlip(f);
+        }}
       />
       <button
         onClick={() => fileRef.current?.click()}
@@ -219,7 +244,11 @@ export function ContributionForm({ goal }: { goal: Goal }) {
               color: fileName ? "var(--accent-ink)" : "var(--ink)",
             }}
           >
-            {fileName ? "แนบสลิปแล้ว" : "แนบสลิปโอนเงิน"}
+            {reading
+              ? "กำลังอ่านยอดจากสลิป…"
+              : fileName
+                ? "แนบสลิปแล้ว"
+                : "แนบสลิปโอนเงิน"}
           </span>
           <span
             className="muted"
