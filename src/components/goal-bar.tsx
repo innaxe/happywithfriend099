@@ -2,11 +2,13 @@
 
 import { usePao } from "./pao-provider";
 import { money, pctOf, tallies } from "@/lib/calc";
-import { MiniRing } from "./primitives";
+import { MiniRing, PersonAvatar } from "./primitives";
 import { Icon } from "./icon";
 
 export function GoalBar() {
-  const { goals, activeId, switchGoal, newGoal } = usePao();
+  const { goals, activeId, switchGoal, newGoal, people } = usePao();
+  const avatarOf = (nick: string) =>
+    people.find((p) => p.nick === nick)?.avatar_url ?? null;
   return (
     <div
       className="noscroll"
@@ -63,6 +65,42 @@ export function GoalBar() {
             </div>
             <div className="num muted" style={{ fontSize: 11.5, marginTop: 2 }}>
               {money(saved, g.currency)} / {money(g.target, g.currency)}
+            </div>
+            {/* รูปสมาชิกในทริป (ซ้อนกัน) — เห็นว่าใครอยู่ทริปนี้บ้าง */}
+            <div className="row" style={{ marginTop: 8 }}>
+              {g.members.slice(0, 4).map((m, idx) => (
+                <span
+                  key={m}
+                  style={{
+                    marginLeft: idx ? -6 : 0,
+                    border: "1.5px solid var(--card)",
+                    borderRadius: "50%",
+                    display: "inline-flex",
+                  }}
+                >
+                  <PersonAvatar nick={m} avatarUrl={avatarOf(m)} size={20} />
+                </span>
+              ))}
+              {g.members.length > 4 && (
+                <span
+                  className="num"
+                  style={{
+                    marginLeft: -6,
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    background: "var(--track)",
+                    border: "1.5px solid var(--card)",
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    color: "var(--muted)",
+                  }}
+                >
+                  +{g.members.length - 4}
+                </span>
+              )}
             </div>
           </button>
         );
