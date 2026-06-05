@@ -59,15 +59,43 @@ export function AppRoot() {
       }
     }
 
-    supabase.auth
-      .getSession()
-      .then(({ data }) => resolve(data.session))
-      .catch(() => {
+    // อ่าน token จาก #fragment เอง (implicit OAuth) แล้วตั้ง session ให้ชัวร์
+    // — ไม่พึ่ง auto-detect อย่างเดียว (บางครั้งไม่ทำงานบน production)
+    async function init() {
+      try {
+        if (
+          typeof window !== "undefined" &&
+          window.location.hash.includes("access_token")
+        ) {
+          const p = new URLSearchParams(window.location.hash.slice(1));
+          const access_token = p.get("access_token");
+          const refresh_token = p.get("refresh_token");
+          if (access_token && refresh_token) {
+            const { data, error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            // ล้าง token ออกจาก URL (ไม่ให้ค้าง/หลุด)
+            window.history.replaceState(
+              {},
+              "",
+              window.location.pathname + window.location.search,
+            );
+            if (!error) {
+              await resolve(data.session);
+              return;
+            }
+          }
+        }
+        const { data } = await supabase.auth.getSession();
+        await resolve(data.session);
+      } catch {
         if (mounted) setStatus("login");
-      });
+      }
+    }
+    void init();
 
-    // รับทุก event — สำคัญ: OAuth (implicit) ส่ง session กลับมาทาง INITIAL_SESSION/SIGNED_IN
-    // ตอน detectSessionInUrl อ่าน token จาก #fragment เสร็จ ถ้ากรองทิ้งจะค้างหน้าล็อกอิน
+    // รับทุก event (SIGNED_IN/SIGNED_OUT/INITIAL_SESSION/TOKEN_REFRESHED)
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
       void resolve(sess);
     });
