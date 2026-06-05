@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# design handoff / archives (ไม่เอาขึ้น repo)
+*.zip
+
 # vercel
 .vercel
 

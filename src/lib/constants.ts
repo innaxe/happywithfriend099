@@ -1,0 +1,40 @@
+// ค่าคงที่
+
+/** key ที่เก็บ Discord webhook ใน localStorage (ต่อเครื่อง) */
+export const WEBHOOK_KEY = "discord_webhook_v1";
+
+/** อิโมจิรีแอกชันสำหรับไดอารี่กลุ่ม */
+export const REACTIONS = ["❤️", "🔥", "🎉", "👏", "😮", "💪"];
+
+/** หมุดหมายความคืบหน้า (%) ที่จะฉลอง + แจ้ง Discord เมื่อยอดสะสมแตะ */
+export const MILESTONES = [25, 50, 75, 100];
+
+/** ชื่อย่อเดือนภาษาไทย */
+export const THMON = [
+  "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+  "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.",
+];
+
+/** จานสี avatar (โทน fintech) — กำหนดสีประจำคนจากชื่อเล่นแบบคงที่ */
+export const AV = [
+  "#0ea5e9", "#8b5cf6", "#f59e0b", "#ec4899",
+  "#10b981", "#6366f1", "#ef4444", "#14b8a6",
+];
+
+/** สีธีมให้เลือกตอนตั้งเป้า */
+export const THEMES = [
+  "#059669", "#0ea5e9", "#8b5cf6", "#f59e0b", "#ec4899", "#ef4444",
+];
+
+/** อิโมจิ preset สำหรับเป้า */
+export const EMOJIS = [
+  "✈️", "🏡", "📷", "🚗", "💍", "🎓", "🏖️", "💻", "🎸", "⛰️", "🐶", "💰",
+];
+
+/** สกุลเงิน: โค้ด → สัญลักษณ์ (เก็บสัญลักษณ์ลง DB) */
+export const CURRENCIES: { code: string; symbol: string }[] = [
+  { code: "THB", symbol: "฿" },
+  { code: "USD", symbol: "$" },
+  { code: "JPY", symbol: "¥" },
+  { code: "EUR", symbol: "€" },
+];
