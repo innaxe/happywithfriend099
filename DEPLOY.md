@@ -16,7 +16,9 @@
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (anon key เต็ม — ดูใน `.env.local` หรือ Supabase → Settings → API) |
 
 > ค่า `NEXT_PUBLIC_*` ถูก inline ตอน build — ถ้าแก้ทีหลังต้อง **redeploy**
-> (จริง ๆ มี fallback ฝังใน `src/lib/supabase.ts` อยู่แล้ว ใส่ env เพื่อความถูกต้อง/เปลี่ยนโปรเจกต์ง่าย)
+> (จริง ๆ มี fallback ฝังใน `src/lib/supabase.ts` อยู่แล้ว — **ถ้าไม่อยากเสี่ยงวางคีย์ไม่ครบ ข้ามขั้นนี้/ลบ env ไปเลยก็ได้** แอปจะใช้ค่าที่ฝังไว้)
+>
+> ⚠️ **กับดักที่เจอจริง:** ถ้า anon key ที่วางใน Vercel **ไม่ครบ/ถูกตัดหาง** → ล็อกอินบนเว็บจริงจะขึ้น `GET /auth/v1/user 401` (แต่ localhost ใช้ได้เพราะใช้ค่า fallback) · แก้: **ลบ env `NEXT_PUBLIC_SUPABASE_ANON_KEY` ออก แล้ว Redeploy** (ให้ใช้ fallback ที่ถูกต้อง) หรือวางคีย์เต็ม ~218 ตัวลงท้าย `...zqGpnQ`
 
 ## 3) กด Deploy → ได้ URL จริง
 เช่น `https://happywithfriend099.vercel.app` — **จดไว้ใช้ขั้นต่อไป**
