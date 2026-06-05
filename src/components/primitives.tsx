@@ -1,6 +1,7 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
+import { colorForNick } from "@/lib/calc";
 import { Icon } from "./icon";
 
 /** หัวข้อ section + ตัวเลือกด้านขวา (sub หรือปุ่ม action) */
@@ -74,6 +75,33 @@ export function Avatar({
       {(nick || "?").slice(0, 1)}
     </span>
   );
+}
+
+/** avatar ที่ใช้รูปโปรไฟล์ Discord ถ้ามี (ไม่งั้น fallback ตัวอักษร) */
+export function PersonAvatar({
+  nick,
+  avatarUrl,
+  size = 36,
+}: {
+  nick: string;
+  avatarUrl?: string | null;
+  size?: number;
+}) {
+  const [broken, setBroken] = useState(false);
+  if (avatarUrl && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatarUrl}
+        alt=""
+        width={size}
+        height={size}
+        onError={() => setBroken(true)}
+        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flex: "0 0 auto" }}
+      />
+    );
+  }
+  return <Avatar nick={nick} color={colorForNick(nick)} size={size} />;
 }
 
 /** วงแหวนใหญ่ (hero) — รับสีธีมเป้า ทำ gradient จากสีอ่อน→สีเข้ม */

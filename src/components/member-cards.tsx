@@ -1,9 +1,9 @@
 "use client";
 
 import { usePao } from "./pao-provider";
-import { colorForNick, deriveGoalStats, money } from "@/lib/calc";
+import { deriveGoalStats, money } from "@/lib/calc";
 import type { Goal } from "@/lib/types";
-import { Avatar, Badge, Pbar, SectionHead } from "./primitives";
+import { PersonAvatar, Badge, Pbar, SectionHead } from "./primitives";
 import { Icon } from "./icon";
 
 export function MemberCards({ goal }: { goal: Goal }) {
@@ -12,6 +12,8 @@ export function MemberCards({ goal }: { goal: Goal }) {
   const per = s.perPersonTarget;
   const order = [...goal.members].sort((a, b) => (s.by[b] ?? 0) - (s.by[a] ?? 0));
   const realOf = (nick: string) => people.find((p) => p.nick === nick)?.real ?? "";
+  const avatarOf = (nick: string) =>
+    people.find((p) => p.nick === nick)?.avatar_url ?? null;
 
   return (
     <div style={{ margin: "18px 18px 0" }}>
@@ -32,7 +34,7 @@ export function MemberCards({ goal }: { goal: Goal }) {
             >
               <div className="between" style={{ marginBottom: 9 }}>
                 <div className="row" style={{ gap: 10, minWidth: 0 }}>
-                  <Avatar nick={m} color={colorForNick(m)} size={36} />
+                  <PersonAvatar nick={m} avatarUrl={avatarOf(m)} size={36} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 650, lineHeight: 1.15 }}>{m}</div>
                     {real && (
