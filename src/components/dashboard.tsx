@@ -11,8 +11,6 @@ import { StatChips } from "./stat-chips";
 import { NudgeBanner } from "./nudge-banner";
 import { ContributionForm } from "./contribution-form";
 import { MemberCards } from "./member-cards";
-import { SettleUp } from "./settle-up";
-import { ChartCard } from "./savings-chart";
 import { MonthTable } from "./monthly-grid";
 import { Activity } from "./history-list";
 import { Feed } from "./feed";
@@ -37,8 +35,6 @@ function DashContent({ goal }: { goal: Goal }) {
       {!solo && <NudgeBanner goal={goal} />}
       <ContributionForm key={goal.id} goal={goal} />
       {!solo && <MemberCards goal={goal} />}
-      {!solo && <SettleUp goal={goal} />}
-      <ChartCard goal={goal} />
       <MonthTable goal={goal} />
       <Activity goal={goal} />
     </>
