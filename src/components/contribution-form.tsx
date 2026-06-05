@@ -2,15 +2,7 @@
 
 import { useRef, useState } from "react";
 import { usePao } from "./pao-provider";
-import {
-  clampMonth,
-  colorForNick,
-  deriveGoalStats,
-  isSolo,
-  monthsList,
-  nowYM,
-  ymLabel,
-} from "@/lib/calc";
+import { clampMonth, colorForNick, monthsList, nowYM, ymLabel } from "@/lib/calc";
 import { compressImage } from "@/lib/image";
 import type { Goal } from "@/lib/types";
 import { Avatar } from "./primitives";
@@ -19,47 +11,42 @@ import { Icon } from "./icon";
 
 // remount ด้วย key={goal.id} จาก dashboard → state เริ่มต้นจาก goal ได้ตรง ๆ
 export function ContributionForm({ goal }: { goal: Goal }) {
-  const { addContribution, busy } = usePao();
-  const solo = isSolo(goal);
+  const { addContribution, busy, myNick, myAvatar } = usePao();
   const months = monthsList(goal);
 
-  const [who, setWho] = useState(goal.members[0] ?? "ฉัน");
   const [month, setMonth] = useState<string>(() => clampMonth(nowYM(), goal));
-  const [amt, setAmt] = useState("");
+  const [amt, setAmt] = useState(""); // ยอดที่ดึงจากสลิป (อ่านอย่างเดียว)
   const [note, setNote] = useState("");
   const [fileName, setFileName] = useState("");
-  const [reading, setReading] = useState(false); // กำลังอ่านยอดจากสลิป
+  const [reading, setReading] = useState(false);
+  const [readErr, setReadErr] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const submitting = useRef(false); // กันกดซ้ำเร็ว ๆ แล้วลงเบิ้ล
+  const submitting = useRef(false);
 
-  // แนบสลิปแล้วลองอ่านยอดอัตโนมัติด้วย Gemini (ถ้าตั้งคีย์ไว้) — แก้เองได้เสมอ
+  // แนบสลิป → ดึงยอดจากสลิปอัตโนมัติด้วย Gemini
   async function readSlip(file: File) {
     setReading(true);
+    setReadErr(false);
+    setAmt("");
     try {
       const img = await compressImage(file);
       const fd = new FormData();
       fd.append("file", img);
       const res = await fetch("/api/read-slip", { method: "POST", body: fd });
-      if (res.ok) {
-        const data = (await res.json()) as { amount?: number | null };
-        if (data.amount && data.amount > 0) setAmt(String(data.amount));
-      }
+      const data = res.ok
+        ? ((await res.json()) as { amount?: number | null })
+        : null;
+      if (data?.amount && data.amount > 0) setAmt(String(data.amount));
+      else setReadErr(true);
     } catch {
-      // เงียบไว้ — อ่านไม่ได้ก็พิมพ์ยอดเองตามปกติ
+      setReadErr(true);
     } finally {
       setReading(false);
     }
   }
 
-  const safeWho =
-    !solo && goal.members.length && !goal.members.includes(who)
-      ? goal.members[0]
-      : who;
   const numAmt = Number(amt.replace(/,/g, ""));
-  const valid = !!amt && numAmt > 0;
-  // เตือนเบา ๆ ถ้ายอดสูงผิดปกติ (เช่นพิมพ์ 35,000 แทน 3,500) — ไม่บล็อกการบันทึก
-  const planPer = deriveGoalStats(goal).planPer;
-  const highAmount = valid && planPer > 0 && numAmt > planPer * 5;
+  const valid = numAmt > 0 && !reading;
 
   async function submit() {
     if (!valid || busy || submitting.current) return;
@@ -67,7 +54,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
     try {
       const file = fileRef.current?.files?.[0] ?? null;
       const ok = await addContribution({
-        name: safeWho,
+        name: myNick, // บันทึกเป็นชื่อคนที่ล็อกอินเสมอ
         month,
         amount: String(numAmt),
         note,
@@ -77,6 +64,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
         setAmt("");
         setNote("");
         setFileName("");
+        setReadErr(false);
         if (fileRef.current) fileRef.current.value = "";
       }
     } finally {
@@ -86,116 +74,33 @@ export function ContributionForm({ goal }: { goal: Goal }) {
 
   return (
     <div className="card" style={{ margin: "14px 18px 0", padding: 18 }}>
-      <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+      <div className="row" style={{ gap: 8, marginBottom: 12 }}>
         <span style={{ color: "var(--accent)" }}>
           <Icon name="plus" size={18} sw={2.2} />
         </span>
         <span style={{ fontWeight: 700, fontSize: 15.5 }}>บันทึกการออม</span>
       </div>
 
-      {!solo && (
-        <>
-          <label className="field-label">ใครโอน</label>
-          <div
-            className="noscroll"
-            style={{
-              display: "flex",
-              gap: 7,
-              overflowX: "auto",
-              paddingBottom: 4,
-              marginBottom: 14,
-            }}
-          >
-            {goal.members.map((m) => {
-              const on = m === safeWho;
-              return (
-                <button
-                  key={m}
-                  onClick={() => setWho(m)}
-                  style={{
-                    flex: "0 0 auto",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: 2,
-                    opacity: on ? 1 : 0.5,
-                    transition: "opacity .15s",
-                  }}
-                >
-                  <Avatar nick={m} color={colorForNick(m)} size={42} ring={on} />
-                  <span style={{ fontSize: 11.5, fontWeight: on ? 700 : 500 }}>{m}</span>
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1.05fr",
-          gap: 10,
-          marginBottom: 12,
-        }}
-      >
-        <div>
-          <label className="field-label">เดือน</label>
-          <Select
-            value={month}
-            onChange={setMonth}
-            ariaLabel="เลือกเดือน"
-            numeric
-            options={months.map((ym) => ({ value: ym, label: ymLabel(ym) }))}
+      {/* บันทึกในชื่อตัวเอง (ไม่มี picker แล้ว) */}
+      <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+        {myAvatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={myAvatar}
+            alt=""
+            width={26}
+            height={26}
+            style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover" }}
           />
-        </div>
-        <div>
-          <label className="field-label">จำนวน</label>
-          <div style={{ position: "relative" }}>
-            <span
-              className="num"
-              style={{
-                position: "absolute",
-                left: 14,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "var(--muted)",
-                fontWeight: 600,
-              }}
-            >
-              {goal.currency}
-            </span>
-            <input
-              className="input num"
-              inputMode="numeric"
-              value={amt}
-              placeholder="3,500"
-              onChange={(e) => setAmt(e.target.value.replace(/[^\d,]/g, ""))}
-              style={{ paddingLeft: 26, fontWeight: 650 }}
-            />
-          </div>
-        </div>
+        ) : (
+          <Avatar nick={myNick} color={colorForNick(myNick)} size={26} />
+        )}
+        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+          บันทึกในชื่อ <b style={{ color: "var(--ink)" }}>{myNick}</b>
+        </span>
       </div>
 
-      {highAmount && (
-        <div
-          className="row"
-          style={{ gap: 6, margin: "-2px 0 12px", fontSize: 11.5, color: "var(--amber)" }}
-        >
-          <Icon name="info" size={13} /> ยอดสูงกว่าปกติ — เช็กอีกครั้งว่าถูกไหม
-        </div>
-      )}
-
-      <label className="field-label">หมายเหตุ</label>
-      <input
-        className="input"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        placeholder="เช่น งวดเดือนนี้ / เก็บเพิ่ม"
-        style={{ marginBottom: 12 }}
-      />
-
+      {/* แนบสลิป (ขับเคลื่อนยอดเงิน) */}
       <input
         ref={fileRef}
         type="file"
@@ -214,7 +119,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
           width: "100%",
           gap: 9,
           padding: "12px 13px",
-          marginBottom: 14,
+          marginBottom: 12,
           border: "1px dashed " + (fileName ? "var(--accent)" : "var(--border-strong)"),
           borderRadius: 12,
           background: fileName ? "var(--accent-soft)" : "transparent",
@@ -260,7 +165,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
               textOverflow: "ellipsis",
             }}
           >
-            {fileName || "รูปภาพ PNG / JPG (ไม่บังคับ)"}
+            {fileName || "แนบแล้วระบบจะอ่านยอดให้อัตโนมัติ"}
           </span>
         </span>
         {fileName && (
@@ -270,12 +175,74 @@ export function ContributionForm({ goal }: { goal: Goal }) {
         )}
       </button>
 
+      {/* เดือน + ยอด (ยอดอ่านจากสลิปอย่างเดียว แก้เองไม่ได้) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1.05fr",
+          gap: 10,
+          marginBottom: readErr ? 6 : 12,
+        }}
+      >
+        <div>
+          <label className="field-label">เดือน</label>
+          <Select
+            value={month}
+            onChange={setMonth}
+            ariaLabel="เลือกเดือน"
+            numeric
+            options={months.map((ym) => ({ value: ym, label: ymLabel(ym) }))}
+          />
+        </div>
+        <div>
+          <label className="field-label">จำนวน (จากสลิป)</label>
+          <div
+            className="input num"
+            aria-live="polite"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              fontWeight: 700,
+              color: amt ? "var(--ink)" : "var(--muted-2)",
+            }}
+          >
+            {reading
+              ? "กำลังอ่าน…"
+              : amt
+                ? goal.currency + Number(amt).toLocaleString("en-US")
+                : "— แนบสลิป"}
+          </div>
+        </div>
+      </div>
+
+      {readErr && (
+        <div
+          className="row"
+          style={{ gap: 6, margin: "0 0 12px", fontSize: 11.5, color: "var(--rose)" }}
+        >
+          <Icon name="info" size={13} /> อ่านยอดจากสลิปไม่ได้ — ลองแนบสลิปที่ชัดกว่านี้
+        </div>
+      )}
+
+      <label className="field-label">หมายเหตุ</label>
+      <input
+        className="input"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="เช่น งวดเดือนนี้ / เก็บเพิ่ม"
+        style={{ marginBottom: 14 }}
+      />
+
       <button
         className="btn btn-primary btn-block"
         disabled={!valid || busy}
         onClick={submit}
       >
-        บันทึกการออม
+        {reading
+          ? "กำลังอ่านสลิป…"
+          : amt
+            ? "บันทึกการออม"
+            : "แนบสลิปก่อนบันทึก"}
       </button>
     </div>
   );
