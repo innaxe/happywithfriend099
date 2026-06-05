@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePao } from "../pao-provider";
-import { colorForNick, isSolo, nowYM, ymAdd } from "@/lib/calc";
+import { colorForNick, isSolo, money, monthsBetween, nowYM, ymAdd } from "@/lib/calc";
 import { CURRENCIES, EMOJIS, THEMES } from "@/lib/constants";
 import { Sheet } from "../sheet";
 import { Avatar } from "../primitives";
@@ -55,6 +55,16 @@ function GoalForm() {
       else next.add(nick);
       return next;
     });
+
+  // ยอดต่อคน/ต่อเดือน (โชว์สดตอนกรอก เพื่อดูว่าไหวไหมก่อนสร้าง)
+  const tgNum = Math.max(0, parseInt(amt.replace(/[^\d]/g, "")) || 0);
+  const memCount = mode === "solo" ? 1 : Math.max(1, sel.size);
+  const bdStart = start || nowYM();
+  const bdEnd = end && end >= bdStart ? end : bdStart;
+  const nMonths = monthsBetween(bdStart, bdEnd);
+  const perPerson = tgNum / memCount;
+  const perMonth = perPerson / nMonths;
+  const curSym = CURRENCIES.find((c) => c.code === curCode)?.symbol ?? "฿";
 
   async function save() {
     if (busy) return;
@@ -228,6 +238,40 @@ function GoalForm() {
             </div>
           )}
         </>
+      )}
+
+      {tgNum > 0 && (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "flex-start",
+            background: "var(--accent-soft)",
+            border: "1px solid var(--accent-soft-2)",
+            borderRadius: 12,
+            padding: "12px 13px",
+            marginBottom: 16,
+          }}
+        >
+          <span style={{ color: "var(--accent)", flex: "0 0 auto", marginTop: 1 }}>
+            <Icon name="info" size={16} />
+          </span>
+          <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--accent-ink)" }}>
+            <div>
+              เป้าต่อคน <b className="num">{money(perPerson, curSym)}</b>
+              {mode === "solo" ? "" : " · " + memCount + " คน"}
+            </div>
+            <div>
+              เก็บ ~<b className="num">{money(perMonth, curSym)}</b>/คน/เดือน{" "}
+              <span className="num" style={{ color: "var(--muted)" }}>
+                ({nMonths} เดือน)
+              </span>
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
+              ไหวไหม? ปรับยอด/เดือน/จำนวนคนได้เลยก่อนสร้าง
+            </div>
+          </div>
+        </div>
       )}
 
       <label className="field-label">สีธีม</label>

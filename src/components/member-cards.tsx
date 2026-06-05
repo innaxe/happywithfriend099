@@ -4,6 +4,7 @@ import { usePao } from "./pao-provider";
 import { colorForNick, deriveGoalStats, money } from "@/lib/calc";
 import type { Goal } from "@/lib/types";
 import { Avatar, Badge, Pbar, SectionHead } from "./primitives";
+import { Icon } from "./icon";
 
 export function MemberCards({ goal }: { goal: Goal }) {
   const { people } = usePao();
@@ -19,6 +20,7 @@ export function MemberCards({ goal }: { goal: Goal }) {
         {order.map((m, i) => {
           const saved = s.by[m] ?? 0;
           const pct = per ? saved / per : 0;
+          const done = per > 0 && saved >= per * 0.999; // เก็บครบเป้าต่อคนแล้ว
           // ตามดีไซน์: ระดับความคืบหน้าเทียบเป้าต่อคน (เขียว/เหลือง/แดง)
           const kind: "ok" | "warn" | "late" =
             pct >= 0.55 ? "ok" : pct >= 0.4 ? "warn" : "late";
@@ -40,7 +42,13 @@ export function MemberCards({ goal }: { goal: Goal }) {
                     )}
                   </div>
                 </div>
-                <Badge kind={kind} />
+                {done ? (
+                  <span className="badge ok">
+                    <Icon name="check" size={12} sw={2.4} /> ครบแล้ว
+                  </span>
+                ) : (
+                  <Badge kind={kind} />
+                )}
               </div>
               <Pbar pct={pct} color={kind === "late" ? "#f59e0b" : undefined} />
               <div className="between num" style={{ marginTop: 7, fontSize: 12 }}>

@@ -244,8 +244,9 @@ export function settleUp(g: Goal): SettleUp {
 export interface MMCell {
   ym: string;
   amount: number; // ยอดที่คนนี้โอนในเดือนนี้
-  paid: boolean; // โอนครบงวด (>= เป้าต่อคน/เดือน) และเดือนนี้ถึงแล้ว
+  paid: boolean; // ยอดสะสมถึงเดือนนี้ "ตามเป้า" แล้ว (โอนเกินเดือนก่อนยกยอดมาได้)
   started: boolean; // เดือนนี้มาถึงแล้ว (<= ปัจจุบัน)
+  done: boolean; // เก็บครบเป้าต่อคนแล้ว (จบก่อนกำหนดได้)
 }
 export interface MMRow {
   nick: string;
@@ -260,8 +261,9 @@ export interface MemberMonthMatrix {
 }
 
 /**
- * ตารางรายคน × รายเดือน: ใครโอนครบงวดเดือนไหน (เขียว) / ยังไม่โอน (แดง)
- * - "ครบงวด" = ยอดเดือนนั้นของคนนั้น >= เป้าต่อคน/เดือน
+ * ตารางรายคน × รายเดือน แบบ "สะสม" (เขียว = ตามเป้าถึงเดือนนี้ / แดง = ยังขาด)
+ * - เทียบยอดสะสมถึงเดือนนั้น กับ เป้าสะสม (เป้าต่อคน/เดือน × จำนวนเดือน, ไม่เกินเป้าต่อคน)
+ * - โอนเกินเดือนก่อน ยกยอดมาเดือนหลังได้ · ครบเป้าต่อคนแล้ว = จบ (done) ทุกเดือนถัดไปเขียว
  * - เดือนอนาคต (ยังไม่ถึง) = started:false → โชว์เป็นกลาง ไม่นับแดง
  */
 export function memberMonthMatrix(g: Goal): MemberMonthMatrix {
@@ -269,6 +271,7 @@ export function memberMonthMatrix(g: Goal): MemberMonthMatrix {
   const monthsArr = monthsList(g);
   const cur = nowYM();
   const perMonth = (g.target || 0) / members.length / monthsArr.length;
+  const perPersonTotal = (g.target || 0) / members.length; // เป้าต่อคน (ยอดรวม)
 
   // map[nick][ym] = ยอดรวมของคนนั้นในเดือนนั้น
   const map: Record<string, Record<string, number>> = {};
@@ -289,16 +292,21 @@ export function memberMonthMatrix(g: Goal): MemberMonthMatrix {
     return { ym, label: ymLabel(ym), started, total };
   });
 
+  // คิดแบบ "สะสม": โอนเกินเดือนก่อนยกยอดมาเดือนหลังได้ · ครบเป้าต่อคนแล้ว = จบ
   const rows: MMRow[] = members.map((nick) => {
     let paidCount = 0;
     let startedCount = 0;
-    const cells = monthsArr.map((ym) => {
+    let cum = 0;
+    const cells = monthsArr.map((ym, i) => {
       const started = ym <= cur;
       const amount = map[nick]?.[ym] ?? 0;
-      const paid = started && perMonth > 0 && amount >= perMonth * 0.999;
+      cum += amount;
+      const expectedCum = Math.min(perPersonTotal, perMonth * (i + 1));
+      const done = perPersonTotal > 0 && cum >= perPersonTotal * 0.999;
+      const paid = started && expectedCum > 0 && cum >= expectedCum * 0.999;
       if (started) startedCount++;
       if (paid) paidCount++;
-      return { ym, amount, paid, started };
+      return { ym, amount, paid, started, done };
     });
     return { nick, cells, paidCount, startedCount };
   });

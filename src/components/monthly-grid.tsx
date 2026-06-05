@@ -35,15 +35,15 @@ export function MonthTable({ goal }: { goal: Goal }) {
     <div style={{ margin: "20px 18px 0" }}>
       <SectionHead title="ใครโอนเดือนไหน" sub={money(perMonth, goal.currency) + "/คน/เดือน"} />
 
-      {/* คำอธิบายสี */}
+      {/* คำอธิบายสี (คิดแบบสะสม — โอนเกินเดือนก่อนยกมาเดือนหลังได้) */}
       <div className="row" style={{ gap: 16, margin: "0 2px 10px" }}>
         <span className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)" }}>
           <span style={{ width: 11, height: 11, borderRadius: 4, background: GREEN_INK }} />
-          โอนครบงวด
+          ตามเป้า
         </span>
         <span className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)" }}>
           <span style={{ width: 11, height: 11, borderRadius: 4, background: RED_INK }} />
-          ยังไม่โอน
+          ยังขาด
         </span>
         <span className="row" style={{ gap: 6, fontSize: 12, color: "var(--muted)" }}>
           <span
@@ -156,7 +156,7 @@ export function MonthTable({ goal }: { goal: Goal }) {
                         {r.nick}
                       </div>
                       <div className="num muted" style={{ fontSize: 10 }}>
-                        ครบ {r.paidCount}/{r.startedCount}
+                        ตามเป้า {r.paidCount}/{r.startedCount}
                       </div>
                     </div>
                   </div>
@@ -178,7 +178,12 @@ export function MonthTable({ goal }: { goal: Goal }) {
                         }}
                         title={
                           c.started
-                            ? (c.paid ? "โอนครบงวด · " : "ยังไม่ครบ · ") +
+                            ? (c.done
+                                ? "ครบเป้าแล้ว · "
+                                : c.paid
+                                  ? "ตามเป้าสะสม · "
+                                  : "ยังขาด (สะสม) · ") +
+                              "เดือนนี้ " +
                               money(c.amount, goal.currency)
                             : "ยังไม่ถึงเดือนนี้"
                         }
