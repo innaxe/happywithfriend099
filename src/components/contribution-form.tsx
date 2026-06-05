@@ -220,23 +220,53 @@ export function ContributionForm({ goal }: { goal: Goal }) {
           />
         </div>
         <div>
-          <label className="field-label">จำนวน (จากสลิป)</label>
-          <div
-            className="input num"
-            aria-live="polite"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              fontWeight: 700,
-              color: amt ? "var(--ink)" : "var(--muted-2)",
-            }}
-          >
-            {reading
-              ? "กำลังอ่าน…"
-              : amt
-                ? goal.currency + Number(amt).toLocaleString("en-US")
-                : "— แนบสลิป"}
-          </div>
+          <label className="field-label">
+            {readErr ? "จำนวน (พิมพ์เอง)" : "จำนวน (จากสลิป)"}
+          </label>
+          {readErr ? (
+            // อ่านสลิปไม่ได้ → ให้พิมพ์ยอดเอง (fallback)
+            <div style={{ position: "relative" }}>
+              <span
+                className="num"
+                style={{
+                  position: "absolute",
+                  left: 14,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "var(--muted)",
+                  fontWeight: 600,
+                }}
+              >
+                {goal.currency}
+              </span>
+              <input
+                className="input num"
+                inputMode="numeric"
+                value={amt}
+                autoFocus
+                onChange={(e) => setAmt(e.target.value.replace(/[^\d,]/g, ""))}
+                placeholder="พิมพ์ยอด"
+                style={{ paddingLeft: 26, fontWeight: 700 }}
+              />
+            </div>
+          ) : (
+            <div
+              className="input num"
+              aria-live="polite"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                fontWeight: 700,
+                color: amt ? "var(--ink)" : "var(--muted-2)",
+              }}
+            >
+              {reading
+                ? "กำลังอ่าน…"
+                : amt
+                  ? goal.currency + Number(amt).toLocaleString("en-US")
+                  : "— แนบสลิป"}
+            </div>
+          )}
         </div>
       </div>
 
@@ -250,9 +280,9 @@ export function ContributionForm({ goal }: { goal: Goal }) {
       ) : readErr ? (
         <div
           className="row"
-          style={{ gap: 6, margin: "0 0 12px", fontSize: 11.5, color: "var(--rose)" }}
+          style={{ gap: 6, margin: "0 0 12px", fontSize: 11.5, color: "var(--amber)" }}
         >
-          <Icon name="info" size={13} /> อ่านยอดอัตโนมัติไม่สำเร็จ — ลองแนบอีกครั้ง
+          <Icon name="info" size={13} /> อ่านยอดอัตโนมัติไม่ได้ — พิมพ์ยอดเองด้านบนได้เลย
         </div>
       ) : null}
 
@@ -276,7 +306,9 @@ export function ContributionForm({ goal }: { goal: Goal }) {
             ? "คุณส่งสลิปซ้ำ"
             : amt
               ? "บันทึกการออม"
-              : "แนบสลิปก่อนบันทึก"}
+              : readErr
+                ? "พิมพ์ยอดก่อนบันทึก"
+                : "แนบสลิปก่อนบันทึก"}
       </button>
     </div>
   );
