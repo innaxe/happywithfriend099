@@ -66,10 +66,10 @@ export function AppRoot() {
         if (mounted) setStatus("login");
       });
 
-    // getSession() จัดการ initial แล้ว — สนใจเฉพาะตอนเข้า (กลับจาก Discord) / ออกจริง
-    // ข้าม TOKEN_REFRESHED/INITIAL_SESSION เพื่อไม่ query ซ้ำหรือเด้งผู้ใช้ที่ล็อกอินอยู่
-    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
-      if (event === "SIGNED_IN" || event === "SIGNED_OUT") void resolve(sess);
+    // รับทุก event — สำคัญ: OAuth (implicit) ส่ง session กลับมาทาง INITIAL_SESSION/SIGNED_IN
+    // ตอน detectSessionInUrl อ่าน token จาก #fragment เสร็จ ถ้ากรองทิ้งจะค้างหน้าล็อกอิน
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+      void resolve(sess);
     });
 
     return () => {
