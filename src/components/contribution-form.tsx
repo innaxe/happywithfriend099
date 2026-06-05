@@ -11,7 +11,7 @@ import { Icon } from "./icon";
 
 // remount ด้วย key={goal.id} จาก dashboard → state เริ่มต้นจาก goal ได้ตรง ๆ
 export function ContributionForm({ goal }: { goal: Goal }) {
-  const { addContribution, busy, myNick, myAvatar } = usePao();
+  const { addContribution, checkSlipUsed, busy, myNick, myAvatar } = usePao();
   const months = monthsList(goal);
 
   const [month, setMonth] = useState<string>(() => clampMonth(nowYM(), goal));
@@ -20,24 +20,34 @@ export function ContributionForm({ goal }: { goal: Goal }) {
   const [fileName, setFileName] = useState("");
   const [reading, setReading] = useState(false);
   const [readErr, setReadErr] = useState(false);
+  const [slipRef, setSlipRef] = useState<string | null>(null); // เลขที่รายการ
+  const [dup, setDup] = useState(false); // สลิปนี้เคยใช้แล้ว
   const fileRef = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
 
-  // แนบสลิป → ดึงยอดจากสลิปอัตโนมัติด้วย Gemini
+  // แนบสลิป → ดึงยอด + เลขที่รายการจากสลิป + เช็กว่าเคยใช้ไหม
   async function readSlip(file: File) {
     setReading(true);
     setReadErr(false);
+    setDup(false);
     setAmt("");
+    setSlipRef(null);
     try {
       const img = await compressImage(file);
       const fd = new FormData();
       fd.append("file", img);
       const res = await fetch("/api/read-slip", { method: "POST", body: fd });
       const data = res.ok
-        ? ((await res.json()) as { amount?: number | null })
+        ? ((await res.json()) as {
+            amount?: number | null;
+            ref?: string | null;
+          })
         : null;
       if (data?.amount && data.amount > 0) setAmt(String(data.amount));
       else setReadErr(true);
+      const ref = data?.ref ?? null;
+      setSlipRef(ref);
+      if (ref && (await checkSlipUsed(ref))) setDup(true);
     } catch {
       setReadErr(true);
     } finally {
@@ -46,7 +56,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
   }
 
   const numAmt = Number(amt.replace(/,/g, ""));
-  const valid = numAmt > 0 && !reading;
+  const valid = numAmt > 0 && !reading && !dup;
 
   async function submit() {
     if (!valid || busy || submitting.current) return;
@@ -59,12 +69,15 @@ export function ContributionForm({ goal }: { goal: Goal }) {
         amount: String(numAmt),
         note,
         file,
+        slipRef,
       });
       if (ok) {
         setAmt("");
         setNote("");
         setFileName("");
         setReadErr(false);
+        setDup(false);
+        setSlipRef(null);
         if (fileRef.current) fileRef.current.value = "";
       }
     } finally {
@@ -181,7 +194,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
           display: "grid",
           gridTemplateColumns: "1fr 1.05fr",
           gap: 10,
-          marginBottom: readErr ? 6 : 12,
+          marginBottom: dup || readErr ? 6 : 12,
         }}
       >
         <div>
@@ -215,14 +228,21 @@ export function ContributionForm({ goal }: { goal: Goal }) {
         </div>
       </div>
 
-      {readErr && (
+      {dup ? (
+        <div
+          className="row"
+          style={{ gap: 6, margin: "0 0 12px", fontSize: 11.5, color: "var(--rose)", fontWeight: 600 }}
+        >
+          <Icon name="info" size={13} /> สลิปนี้ถูกใช้ไปแล้ว — แนบสลิปอื่น
+        </div>
+      ) : readErr ? (
         <div
           className="row"
           style={{ gap: 6, margin: "0 0 12px", fontSize: 11.5, color: "var(--rose)" }}
         >
           <Icon name="info" size={13} /> อ่านยอดจากสลิปไม่ได้ — ลองแนบสลิปที่ชัดกว่านี้
         </div>
-      )}
+      ) : null}
 
       <label className="field-label">หมายเหตุ</label>
       <input
@@ -240,9 +260,11 @@ export function ContributionForm({ goal }: { goal: Goal }) {
       >
         {reading
           ? "กำลังอ่านสลิป…"
-          : amt
-            ? "บันทึกการออม"
-            : "แนบสลิปก่อนบันทึก"}
+          : dup
+            ? "สลิปนี้ใช้ไปแล้ว"
+            : amt
+              ? "บันทึกการออม"
+              : "แนบสลิปก่อนบันทึก"}
       </button>
     </div>
   );

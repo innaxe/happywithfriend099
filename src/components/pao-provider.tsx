@@ -49,6 +49,12 @@ function errMsg(e: unknown): string {
   return String(e);
 }
 
+/** ตรวจว่าเป็น error "คีย์ซ้ำ" (unique constraint) จาก Postgres ไหม */
+function isDupErr(e: unknown): boolean {
+  const code = (e as { code?: string } | null)?.code;
+  return code === "23505" || /duplicate key|unique constraint/i.test(errMsg(e));
+}
+
 /** ข้อความ error ที่เป็นมิตร: ถ้าโดน RLS ปฏิเสธ (ปลอมชื่อ) ให้บอกชัด ๆ */
 function rlsMsg(e: unknown, friendlyRls: string): string {
   const m = errMsg(e);
@@ -70,6 +76,7 @@ export interface AddContributionInput {
   amount: string; // ดิบจาก input
   note: string;
   file: File | null;
+  slipRef?: string | null; // เลขที่รายการจากสลิป (กันส่งซ้ำ)
 }
 
 export interface AddUpdateInput {
@@ -115,6 +122,7 @@ interface PaoContextValue {
   // mutations
   reload: (preferActiveId?: string) => Promise<LoadedData>;
   addContribution: (input: AddContributionInput) => Promise<boolean>;
+  checkSlipUsed: (ref: string) => Promise<boolean>;
   deleteContribution: (id: string) => Promise<void>;
   updateContribution: (
     id: string,
@@ -446,6 +454,19 @@ export function PaoProvider({
         return false;
       }
       const note = input.note.trim();
+      const slipRef = input.slipRef ?? null;
+      // กันส่งสลิปซ้ำ: ถ้าเลขที่รายการนี้เคยมีแล้ว → ไม่ให้บันทึก (เช็กก่อนอัปสลิป)
+      if (slipRef) {
+        const dup = await supabase
+          .from("contributions")
+          .select("id")
+          .eq("slip_ref", slipRef)
+          .limit(1);
+        if (dup.data && dup.data.length > 0) {
+          showToast("สลิปนี้ถูกใช้ไปแล้ว", "error");
+          return false;
+        }
+      }
       const beforeSaved = tallies(g).saved; // ยอดสะสมก่อนบันทึก (ไว้เทียบหมุดหมาย)
       let ok = false;
       setBusy(true);
@@ -471,7 +492,15 @@ export function PaoProvider({
         }
         const ins = await supabase
           .from("contributions")
-          .insert({ goal_id: g.id, name, month, amount, note, slip_url: slipUrl })
+          .insert({
+            goal_id: g.id,
+            name,
+            month,
+            amount,
+            note,
+            slip_url: slipUrl,
+            slip_ref: slipRef,
+          })
           .select()
           .single();
         if (ins.error) throw ins.error;
@@ -499,13 +528,27 @@ export function PaoProvider({
         showToast("บันทึกแล้ว · ทุกคนเห็นยอดอัปเดตทันที");
         ok = true;
       } catch (e) {
-        showToast("บันทึกไม่สำเร็จ: " + errMsg(e), "error");
+        showToast(
+          isDupErr(e) ? "สลิปนี้ถูกใช้ไปแล้ว" : "บันทึกไม่สำเร็จ: " + errMsg(e),
+          "error",
+        );
       }
       setBusy(false);
       return ok;
     },
     [goals, activeId, reload, showToast],
   );
+
+  // เช็กว่าเลขที่รายการของสลิปนี้เคยถูกใช้แล้วไหม (ไว้เตือนตอนแนบสลิป)
+  const checkSlipUsed = useCallback(async (ref: string): Promise<boolean> => {
+    if (!ref) return false;
+    const r = await supabase
+      .from("contributions")
+      .select("id")
+      .eq("slip_ref", ref)
+      .limit(1);
+    return !!(r.data && r.data.length > 0);
+  }, []);
 
   const deleteContribution = useCallback(
     async (id: string) => {
@@ -885,6 +928,7 @@ export function PaoProvider({
     switchGoal,
     reload,
     addContribution,
+    checkSlipUsed,
     deleteContribution,
     updateContribution,
     editingContribution,

@@ -146,4 +146,9 @@ create policy "settings insert" on public.app_settings for insert to authenticat
 create policy "settings update" on public.app_settings for update to authenticated using (true) with check (true);
 alter publication supabase_realtime add table public.app_settings;
 
+-- ---------- กันส่งสลิปซ้ำ (= migrate-4-slip-dedup.sql) ----------
+alter table public.contributions add column if not exists slip_ref text;
+create unique index if not exists contributions_slip_ref_uniq
+  on public.contributions (slip_ref) where slip_ref is not null;
+
 -- เสร็จแล้ว ✅

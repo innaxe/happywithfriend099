@@ -28,9 +28,11 @@ export async function POST(req: Request): Promise<Response> {
   const prompt =
     "นี่คือรูปสลิปโอนเงินของธนาคารไทย/พร้อมเพย์ ดึงข้อมูลนี้: " +
     "amount = จำนวนเงินที่โอน (ตัวเลขล้วน ไม่มีคอมม่า/สัญลักษณ์), " +
-    "date = วันที่โอนในรูปแบบ YYYY-MM-DD (ถ้าหาไม่เจอให้เป็น null). " +
-    'ตอบเป็น JSON เท่านั้น เช่น {"amount": 500, "date": "2026-06-05"}. ' +
-    "ถ้าไม่ใช่สลิปโอนเงินให้ตอบ {\"amount\": null, \"date\": null}";
+    "date = วันที่โอนในรูปแบบ YYYY-MM-DD (ถ้าหาไม่เจอให้เป็น null), " +
+    "ref = เลขที่รายการ/รหัสอ้างอิง/Reference No ของการโอน " +
+    "(เอาเฉพาะตัวเลขและตัวอักษร ไม่มีช่องว่าง/ขีด ถ้าหาไม่เจอให้เป็น null). " +
+    'ตอบเป็น JSON เท่านั้น เช่น {"amount": 500, "date": "2026-06-05", "ref": "016156145649CTF04997"}. ' +
+    'ถ้าไม่ใช่สลิปโอนเงินให้ตอบ {"amount": null, "date": null, "ref": null}';
 
   try {
     const res = await fetch(
@@ -57,7 +59,11 @@ export async function POST(req: Request): Promise<Response> {
     const data = await res.json();
     const text: string =
       data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-    let parsed: { amount?: number | null; date?: string | null } = {};
+    let parsed: {
+      amount?: number | null;
+      date?: string | null;
+      ref?: string | null;
+    } = {};
     try {
       parsed = JSON.parse(text);
     } catch {
@@ -77,7 +83,11 @@ export async function POST(req: Request): Promise<Response> {
       typeof parsed.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)
         ? parsed.date
         : null;
-    return Response.json({ amount, date });
+    const ref =
+      typeof parsed.ref === "string" && parsed.ref.replace(/\s/g, "").length >= 6
+        ? parsed.ref.replace(/\s/g, "")
+        : null;
+    return Response.json({ amount, date, ref });
   } catch {
     return Response.json({ error: "อ่านสลิปไม่สำเร็จ" }, { status: 500 });
   }
