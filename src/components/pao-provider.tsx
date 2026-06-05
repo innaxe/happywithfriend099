@@ -11,6 +11,7 @@ import {
 } from "react";
 import { supabase } from "@/lib/supabase";
 import {
+  applyWebhookCache,
   getWebhook,
   notifyDiscord,
   notifyMilestone,
@@ -129,6 +130,9 @@ interface PaoContextValue {
   addComment: (updateId: string, text: string) => Promise<boolean>;
   deleteComment: (id: string) => Promise<void>;
   nudgeUnpaid: () => Promise<void>;
+  // Discord webhook ส่วนกลาง (ใช้ร่วมทั้งกลุ่ม)
+  webhooks: { savings: string; diary: string };
+  saveWebhooks: (kind: "savings" | "diary", url: string) => Promise<void>;
   saveGoal: (draft: GoalDraft, editingId: string | null) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   addPerson: (nick: string, real: string) => Promise<boolean>;
@@ -265,6 +269,10 @@ export function PaoProvider({
   const [shareOpen, setShareOpen] = useState(false);
   const [editingContribution, setEditingContribution] =
     useState<Contribution | null>(null);
+  const [webhooks, setWebhooks] = useState<{ savings: string; diary: string }>({
+    savings: "",
+    diary: "",
+  });
 
   // ===== toast =====
   const toastSeq = useRef(0);
@@ -289,7 +297,7 @@ export function PaoProvider({
 
   const reload = useCallback(
     async (preferActiveId?: string): Promise<LoadedData> => {
-      const [pp, gg, cc, uu, rx, cm] = await Promise.all([
+      const [pp, gg, cc, uu, rx, cm, st] = await Promise.all([
         supabase
           .from("people")
           .select("*")
@@ -311,6 +319,7 @@ export function PaoProvider({
           .from("update_comments")
           .select("*")
           .order("created_at", { ascending: true }),
+        supabase.from("app_settings").select("*").eq("id", "global").maybeSingle(),
       ]);
       if (pp.error) throw pp.error;
       if (gg.error) throw gg.error;
@@ -318,6 +327,15 @@ export function PaoProvider({
       if (uu.error) throw uu.error;
       if (rx.error) throw rx.error;
       if (cm.error) throw cm.error;
+      // app_settings ไม่ throw — เผื่อยังไม่ได้รัน migrate-3-shared-webhook.sql
+      const stRow = (st.data ?? null) as {
+        discord_savings?: string | null;
+        discord_diary?: string | null;
+      } | null;
+      const savings = stRow?.discord_savings ?? "";
+      const diary = stRow?.discord_diary ?? "";
+      applyWebhookCache(savings, diary);
+      setWebhooks({ savings, diary });
 
       const nextPeople = mapPeople((pp.data ?? []) as PersonRow[]);
       const nextGoals = mapGoals(
@@ -391,6 +409,11 @@ export function PaoProvider({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "update_comments" },
+        debouncedReload,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "app_settings" },
         debouncedReload,
       )
       .subscribe();
@@ -812,6 +835,28 @@ export function PaoProvider({
     );
   }, [goals, activeId, people, showToast]);
 
+  // บันทึก Discord webhook ส่วนกลาง (ใช้ร่วมทั้งกลุ่ม)
+  const saveWebhooks = useCallback(
+    async (kind: "savings" | "diary", url: string) => {
+      const next = { ...webhooks, [kind]: url };
+      setWebhooks(next);
+      applyWebhookCache(next.savings, next.diary);
+      try {
+        const col = kind === "savings" ? "discord_savings" : "discord_diary";
+        const r = await supabase
+          .from("app_settings")
+          .upsert(
+            { id: "global", [col]: url, updated_at: new Date().toISOString() },
+            { onConflict: "id" },
+          );
+        if (r.error) throw r.error;
+      } catch (e) {
+        showToast("บันทึก Webhook ไม่สำเร็จ: " + errMsg(e), "error");
+      }
+    },
+    [webhooks, showToast],
+  );
+
   // ===== dialog openers =====
   const newGoal = useCallback(() => {
     setGoalDialog({ open: true, editing: null });
@@ -850,6 +895,8 @@ export function PaoProvider({
     addComment,
     deleteComment,
     nudgeUnpaid,
+    webhooks,
+    saveWebhooks,
     saveGoal,
     deleteGoal,
     addPerson,

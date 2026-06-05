@@ -127,4 +127,23 @@ drop policy if exists "feed upload" on storage.objects;
 create policy "feed read"   on storage.objects for select using (bucket_id = 'feed');
 create policy "feed upload" on storage.objects for insert to authenticated with check (bucket_id = 'feed');
 
+-- ============================================================
+--  ค่าส่วนกลาง: Discord webhook ใช้ร่วมทั้งกลุ่ม (= migrate-3-shared-webhook.sql)
+-- ============================================================
+create table if not exists public.app_settings (
+  id              text primary key default 'global',
+  discord_savings text default '',
+  discord_diary   text default '',
+  updated_at      timestamptz default now()
+);
+insert into public.app_settings (id) values ('global') on conflict (id) do nothing;
+alter table public.app_settings enable row level security;
+drop policy if exists "settings read"   on public.app_settings;
+drop policy if exists "settings insert" on public.app_settings;
+drop policy if exists "settings update" on public.app_settings;
+create policy "settings read"   on public.app_settings for select to authenticated using (true);
+create policy "settings insert" on public.app_settings for insert to authenticated with check (true);
+create policy "settings update" on public.app_settings for update to authenticated using (true) with check (true);
+alter publication supabase_realtime add table public.app_settings;
+
 -- เสร็จแล้ว ✅

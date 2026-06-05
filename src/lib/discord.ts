@@ -2,13 +2,18 @@
 import type { Goal, Person } from "./types";
 import { money, ymLabel, tallies } from "./calc";
 
-/** Webhook แยกตามห้อง Discord — ออมเงิน vs ไดอารี่ (เก็บใน localStorage ต่อเครื่อง) */
+/** Webhook แยกตามห้อง Discord — ออมเงิน vs ไดอารี่ (เก็บส่วนกลางใน Supabase) */
 export type Hook = "savings" | "diary";
-const HOOK_KEY: Record<Hook, string> = {
-  savings: "discord_webhook_savings_v1",
-  diary: "discord_webhook_diary_v1",
-};
-const LEGACY_KEY = "discord_webhook_v1"; // ของเดิม key เดียว → ใช้ต่อกับ "savings"
+
+// cache ในหน่วยความจำ — provider เติมค่าจากตาราง app_settings หลังโหลด
+// (ฟังก์ชันแจ้งเตือนเรียกแบบ sync ได้เลย ไม่ต้อง await)
+const hookCache: Record<Hook, string> = { savings: "", diary: "" };
+
+/** provider เรียกหลังโหลดค่า webhook ส่วนกลางมาแล้ว */
+export function applyWebhookCache(savings: string, diary: string): void {
+  hookCache.savings = savings ?? "";
+  hookCache.diary = diary ?? "";
+}
 
 /** แปลงสีธีม hex ของเป้า → ตัวเลขสีของ Discord embed */
 function embedColor(accent: string): number {
@@ -43,18 +48,27 @@ async function post(
   }
 }
 
+/** อ่าน webhook ส่วนกลางจาก cache (ใช้ในฟังก์ชันแจ้งเตือน) */
 export function getWebhook(kind: Hook): string {
-  if (typeof window === "undefined") return "";
-  const v = localStorage.getItem(HOOK_KEY[kind]) ?? "";
-  // เผื่อของเดิมที่เคยตั้ง webhook ตัวเดียว → ใช้เป็นห้อง "ออมเงิน"
-  if (!v && kind === "savings") return localStorage.getItem(LEGACY_KEY) ?? "";
-  return v;
+  return hookCache[kind] ?? "";
 }
 
-export function setWebhook(kind: Hook, url: string): void {
-  if (typeof window === "undefined") return;
-  if (url) localStorage.setItem(HOOK_KEY[kind], url);
-  else localStorage.removeItem(HOOK_KEY[kind]);
+/** ยิง payload ไปยัง webhook URL ที่ระบุตรง ๆ (ใช้ตอนกดทดสอบค่าที่เพิ่งพิมพ์) */
+async function postTo(
+  url: string,
+  body: Record<string, unknown>,
+): Promise<boolean> {
+  if (!url) return false;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "เป้าเงิน", ...body }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 interface NotifyPayload {
@@ -225,20 +239,17 @@ export async function notifyNudge(
   return post({ embeds: [embed] }, "savings"); // → ห้องประวัติออมเงิน
 }
 
-/** ยิง embed ทดสอบเข้า webhook ของห้องที่เลือก (ปุ่ม "ทดสอบ") */
-export async function sendDiscordTest(kind: Hook): Promise<boolean> {
+/** ยิง embed ทดสอบเข้า webhook URL ที่ระบุ (ทดสอบค่าที่เพิ่งพิมพ์) */
+export async function sendDiscordTest(kind: Hook, url: string): Promise<boolean> {
   const label = kind === "diary" ? "ไดอารี่กลุ่ม" : "ประวัติการออม";
-  return post(
-    {
-      embeds: [
-        {
-          title: "🔔 ทดสอบ — " + label,
-          description: "เชื่อมต่อ Discord ห้องนี้สำเร็จ ✅ การแจ้งเตือนจะเข้าห้องนี้",
-          color: 24432,
-          footer: { text: "เป้าเงิน" },
-        },
-      ],
-    },
-    kind,
-  );
+  return postTo(url, {
+    embeds: [
+      {
+        title: "🔔 ทดสอบ — " + label,
+        description: "เชื่อมต่อ Discord ห้องนี้สำเร็จ ✅ การแจ้งเตือนจะเข้าห้องนี้",
+        color: 24432,
+        footer: { text: "เป้าเงิน" },
+      },
+    ],
+  });
 }

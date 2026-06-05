@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePao } from "../pao-provider";
-import { getWebhook, sendDiscordTest, setWebhook, type Hook } from "@/lib/discord";
+import { sendDiscordTest, type Hook } from "@/lib/discord";
 import { Sheet } from "../sheet";
 import { Icon } from "../icon";
 
@@ -16,19 +16,14 @@ export function ShareDialog() {
 }
 
 function SettingsBody() {
-  const { logout, showToast } = usePao();
-  const [savingsHook, setSavingsHook] = useState<string>(() => getWebhook("savings"));
-  const [diaryHook, setDiaryHook] = useState<string>(() => getWebhook("diary"));
+  const { logout, showToast, webhooks, saveWebhooks } = usePao();
+  const [savingsHook, setSavingsHook] = useState<string>(webhooks.savings);
+  const [diaryHook, setDiaryHook] = useState<string>(webhooks.diary);
   const [testing, setTesting] = useState<Hook | null>(null);
   const [copied, setCopied] = useState(false);
 
   const link =
     typeof window !== "undefined" ? window.location.origin : "paongern.app";
-
-  function onHookChange(kind: Hook, v: string, set: (s: string) => void) {
-    set(v);
-    setWebhook(kind, v.trim());
-  }
 
   async function copy() {
     try {
@@ -41,12 +36,14 @@ function SettingsBody() {
   }
 
   async function test(kind: Hook, value: string) {
-    if (!value.trim()) {
+    const url = value.trim();
+    if (!url) {
       showToast("ใส่ Discord Webhook ของห้องนี้ก่อน", "error");
       return;
     }
+    await saveWebhooks(kind, url); // บันทึกค่ากลางก่อนทดสอบ
     setTesting(kind);
-    const ok = await sendDiscordTest(kind);
+    const ok = await sendDiscordTest(kind, url);
     setTesting(null);
     showToast(
       ok ? "ส่งทดสอบแล้ว — เช็คในห้อง Discord ได้เลย" : "ส่งไม่สำเร็จ ตรวจ URL อีกครั้ง",
@@ -100,8 +97,8 @@ function SettingsBody() {
           แยกแจ้งเตือนเป็น 2 ห้อง — <b>บันทึกการออม</b> เข้าห้องประวัติ ·{" "}
           <b>โพสต์ไดอารี่</b> เข้าห้องไดอารี่ (วาง Webhook ของแต่ละห้อง)
           <br />
-          <span style={{ color: "var(--muted)", fontSize: 11.5 }}>
-            ⚠️ เก็บไว้เฉพาะเครื่องนี้ — เปลี่ยนเครื่อง/เบราว์เซอร์ต้องตั้งใหม่
+          <span style={{ color: "var(--accent-ink)", fontSize: 11.5, fontWeight: 600 }}>
+            ✅ ตั้งครั้งเดียว ใช้ร่วมกันทั้งกลุ่ม (เก็บส่วนกลาง) — เพื่อนไม่ต้องตั้งเอง
           </span>
         </span>
       </div>
@@ -110,7 +107,8 @@ function SettingsBody() {
         title="Webhook — ออมเงิน (เข้าห้องประวัติการออม)"
         channel="ห้องออมเงิน"
         value={savingsHook}
-        onChange={(v) => onHookChange("savings", v, setSavingsHook)}
+        onChange={setSavingsHook}
+        onSave={() => saveWebhooks("savings", savingsHook.trim())}
         onTest={() => test("savings", savingsHook)}
         busy={testing === "savings"}
       />
@@ -119,7 +117,8 @@ function SettingsBody() {
         title="Webhook — ไดอารี่ (เข้าห้องไดอารี่)"
         channel="ห้องไดอารี่"
         value={diaryHook}
-        onChange={(v) => onHookChange("diary", v, setDiaryHook)}
+        onChange={setDiaryHook}
+        onSave={() => saveWebhooks("diary", diaryHook.trim())}
         onTest={() => test("diary", diaryHook)}
         busy={testing === "diary"}
       />
@@ -140,12 +139,13 @@ function SettingsBody() {
   );
 }
 
-/** ช่องกรอก Webhook 1 ห้อง + ปุ่มทดสอบ */
+/** ช่องกรอก Webhook 1 ห้อง + ปุ่มทดสอบ (บันทึกค่ากลางตอนคลิกออกจากช่อง) */
 function WebhookField({
   title,
   channel,
   value,
   onChange,
+  onSave,
   onTest,
   busy,
 }: {
@@ -153,6 +153,7 @@ function WebhookField({
   channel: string;
   value: string;
   onChange: (v: string) => void;
+  onSave: () => void;
   onTest: () => void;
   busy: boolean;
 }) {
@@ -163,6 +164,7 @@ function WebhookField({
         className="input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onSave}
         placeholder="https://discord.com/api/webhooks/..."
         style={{ marginBottom: 8, fontSize: 13.5 }}
       />
