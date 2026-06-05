@@ -10,10 +10,12 @@ const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyb25yZmhjc3Zmc3hxaG93b2h2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NTcyMzQsImV4cCI6MjA5NjEzMzIzNH0.zzFBXvCFWYlURqUHDUmGP3H4RlwkZf0f8KHVY3qGpnQ";
 
-// ออปชัน auth สำหรับ OAuth แบบ SPA (Discord) — PKCE + อ่าน session จาก URL หลัง redirect กลับ
+// ออปชัน auth สำหรับ OAuth แบบ SPA (Discord)
+// ใช้ implicit flow: token กลับมาใน URL fragment โดยตรง — ไม่ต้องเก็บ code-verifier
+// ที่ผูกกับโดเมนเริ่มต้น → เด้งกลับโดเมนไหน (นิ่ง/รหัสสุ่มของ Vercel) ก็เข้าได้ ไม่พัง
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    flowType: "pkce",
+    flowType: "implicit",
     detectSessionInUrl: true,
     persistSession: true,
     autoRefreshToken: true,
