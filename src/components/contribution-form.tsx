@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { usePao } from "./pao-provider";
 import { clampMonth, colorForNick, monthsList, nowYM, ymLabel } from "@/lib/calc";
-import { compressImage } from "@/lib/image";
+import { compressImage, fileSha256 } from "@/lib/image";
 import type { Goal } from "@/lib/types";
 import { Avatar } from "./primitives";
 import { Select } from "./select";
@@ -21,18 +21,28 @@ export function ContributionForm({ goal }: { goal: Goal }) {
   const [reading, setReading] = useState(false);
   const [readErr, setReadErr] = useState(false);
   const [slipRef, setSlipRef] = useState<string | null>(null); // เลขที่รายการ
+  const [slipHash, setSlipHash] = useState<string | null>(null); // ลายนิ้วมือรูป
   const [dup, setDup] = useState(false); // สลิปนี้เคยใช้แล้ว
   const fileRef = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
 
-  // แนบสลิป → ดึงยอด + เลขที่รายการจากสลิป + เช็กว่าเคยใช้ไหม
+  // แนบสลิป → เช็กซ้ำจากรูปก่อน (ไม่พึ่ง OCR) → แล้วอ่านยอด+เลขที่รายการ
   async function readSlip(file: File) {
     setReading(true);
     setReadErr(false);
     setDup(false);
     setAmt("");
     setSlipRef(null);
+    setSlipHash(null);
     try {
+      // 1) ลายนิ้วมือของรูป → ถ้าส่งรูปเดิมซ้ำ จับได้ทันที (เชื่อถือได้แม้ OCR อ่านไม่ออก)
+      const hash = await fileSha256(file);
+      setSlipHash(hash);
+      if (hash && (await checkSlipUsed(null, hash))) {
+        setDup(true);
+        return;
+      }
+      // 2) อ่านยอด + เลขที่รายการจากสลิป
       const img = await compressImage(file);
       const fd = new FormData();
       fd.append("file", img);
@@ -47,7 +57,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
       else setReadErr(true);
       const ref = data?.ref ?? null;
       setSlipRef(ref);
-      if (ref && (await checkSlipUsed(ref))) setDup(true);
+      if (ref && (await checkSlipUsed(ref, null))) setDup(true);
     } catch {
       setReadErr(true);
     } finally {
@@ -70,6 +80,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
         note,
         file,
         slipRef,
+        slipHash,
       });
       if (ok) {
         setAmt("");
@@ -78,6 +89,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
         setReadErr(false);
         setDup(false);
         setSlipRef(null);
+        setSlipHash(null);
         if (fileRef.current) fileRef.current.value = "";
       }
     } finally {
@@ -233,7 +245,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
           className="row"
           style={{ gap: 6, margin: "0 0 12px", fontSize: 11.5, color: "var(--rose)", fontWeight: 600 }}
         >
-          <Icon name="info" size={13} /> สลิปนี้ถูกใช้ไปแล้ว — แนบสลิปอื่น
+          <Icon name="info" size={13} /> คุณส่งสลิปซ้ำ — แนบสลิปอื่น
         </div>
       ) : readErr ? (
         <div
@@ -261,7 +273,7 @@ export function ContributionForm({ goal }: { goal: Goal }) {
         {reading
           ? "กำลังอ่านสลิป…"
           : dup
-            ? "สลิปนี้ใช้ไปแล้ว"
+            ? "คุณส่งสลิปซ้ำ"
             : amt
               ? "บันทึกการออม"
               : "แนบสลิปก่อนบันทึก"}

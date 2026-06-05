@@ -1,6 +1,20 @@
 // บีบอัด/ย่อรูปฝั่ง browser ก่อนอัปขึ้น Storage — ประหยัดพื้นที่ Supabase หลายเท่า
 // (รูปมือถือ 2–5MB → ~150–400KB) ทำงานเฉพาะฝั่ง client เท่านั้น
 
+/** SHA-256 ของไฟล์ (เลขลายนิ้วมือของรูป) — ใช้กันส่งรูปสลิปเดิมซ้ำ */
+export async function fileSha256(file: File): Promise<string> {
+  try {
+    if (typeof crypto === "undefined" || !crypto.subtle) return "";
+    const buf = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  } catch {
+    return "";
+  }
+}
+
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();

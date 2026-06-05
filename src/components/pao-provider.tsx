@@ -77,6 +77,7 @@ export interface AddContributionInput {
   note: string;
   file: File | null;
   slipRef?: string | null; // เลขที่รายการจากสลิป (กันส่งซ้ำ)
+  slipHash?: string | null; // ลายนิ้วมือของรูปสลิป (กันส่งรูปเดิมซ้ำ)
 }
 
 export interface AddUpdateInput {
@@ -122,7 +123,7 @@ interface PaoContextValue {
   // mutations
   reload: (preferActiveId?: string) => Promise<LoadedData>;
   addContribution: (input: AddContributionInput) => Promise<boolean>;
-  checkSlipUsed: (ref: string) => Promise<boolean>;
+  checkSlipUsed: (ref: string | null, hash: string | null) => Promise<boolean>;
   deleteContribution: (id: string) => Promise<void>;
   updateContribution: (
     id: string,
@@ -455,15 +456,19 @@ export function PaoProvider({
       }
       const note = input.note.trim();
       const slipRef = input.slipRef ?? null;
-      // กันส่งสลิปซ้ำ: ถ้าเลขที่รายการนี้เคยมีแล้ว → ไม่ให้บันทึก (เช็กก่อนอัปสลิป)
-      if (slipRef) {
+      const slipHash = input.slipHash ?? null;
+      // กันส่งสลิปซ้ำ: เช็กจากรูป (hash) หรือเลขที่รายการ (ref) ก่อนอัป
+      if (slipRef || slipHash) {
+        const conds: string[] = [];
+        if (slipRef) conds.push(`slip_ref.eq.${slipRef}`);
+        if (slipHash) conds.push(`slip_hash.eq.${slipHash}`);
         const dup = await supabase
           .from("contributions")
           .select("id")
-          .eq("slip_ref", slipRef)
+          .or(conds.join(","))
           .limit(1);
         if (dup.data && dup.data.length > 0) {
-          showToast("สลิปนี้ถูกใช้ไปแล้ว", "error");
+          showToast("คุณส่งสลิปซ้ำ", "error");
           return false;
         }
       }
@@ -500,6 +505,7 @@ export function PaoProvider({
             note,
             slip_url: slipUrl,
             slip_ref: slipRef,
+            slip_hash: slipHash,
           })
           .select()
           .single();
@@ -529,7 +535,7 @@ export function PaoProvider({
         ok = true;
       } catch (e) {
         showToast(
-          isDupErr(e) ? "สลิปนี้ถูกใช้ไปแล้ว" : "บันทึกไม่สำเร็จ: " + errMsg(e),
+          isDupErr(e) ? "คุณส่งสลิปซ้ำ" : "บันทึกไม่สำเร็จ: " + errMsg(e),
           "error",
         );
       }
@@ -539,16 +545,22 @@ export function PaoProvider({
     [goals, activeId, reload, showToast],
   );
 
-  // เช็กว่าเลขที่รายการของสลิปนี้เคยถูกใช้แล้วไหม (ไว้เตือนตอนแนบสลิป)
-  const checkSlipUsed = useCallback(async (ref: string): Promise<boolean> => {
-    if (!ref) return false;
-    const r = await supabase
-      .from("contributions")
-      .select("id")
-      .eq("slip_ref", ref)
-      .limit(1);
-    return !!(r.data && r.data.length > 0);
-  }, []);
+  // เช็กว่าสลิปนี้เคยถูกใช้แล้วไหม — จากรูป (hash) หรือเลขที่รายการ (ref)
+  const checkSlipUsed = useCallback(
+    async (ref: string | null, hash: string | null): Promise<boolean> => {
+      const conds: string[] = [];
+      if (ref) conds.push(`slip_ref.eq.${ref}`);
+      if (hash) conds.push(`slip_hash.eq.${hash}`);
+      if (!conds.length) return false;
+      const r = await supabase
+        .from("contributions")
+        .select("id")
+        .or(conds.join(","))
+        .limit(1);
+      return !!(r.data && r.data.length > 0);
+    },
+    [],
+  );
 
   const deleteContribution = useCallback(
     async (id: string) => {
