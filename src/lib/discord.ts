@@ -90,48 +90,50 @@ export async function notifyDiscord(
 ): Promise<void> {
   if (!getWebhook("savings")) return;
 
-  const { saved } = tallies(goal);
-  const target = goal.target || 1;
-  const pct = Math.round((saved / target) * 100);
+  // ยอดของ "คนนั้น" เทียบเป้าต่อคน (ไม่ใช่ยอดรวมทั้งกลุ่ม)
+  const { by } = tallies(goal);
+  const memCount = Math.max(1, goal.members.length);
+  const perPersonTarget = (goal.target || 0) / memCount;
+  const personSaved = by[c.name] ?? 0;
+  const pct =
+    perPersonTarget > 0 ? Math.round((personSaved / perPersonTarget) * 100) : 0;
 
-  let color = 24432;
-  try {
-    color = parseInt((goal.accent || "#059669").replace("#", ""), 16);
-  } catch {
-    color = 24432;
-  }
-
-  const real = people.find((p) => p.nick === c.name)?.real ?? "";
-  const disp = real || c.name;
+  const person = people.find((p) => p.nick === c.name);
+  const disp = person?.real || c.name; // ชื่อที่โชว์เป็นหัวข้อความ
+  const avatarUrl = person?.avatar_url || undefined; // รูปโปรไฟล์ Discord ของคนโอน
 
   const embed: Record<string, unknown> = {
-    title: "✅ " + disp + " โอนแล้ว " + money(c.amount, goal.currency),
-    color,
+    title: "✅ โอนแล้ว " + money(c.amount, goal.currency),
+    color: embedColor(goal.accent),
     description:
       (goal.emoji || "🎯") +
       " " +
       goal.name +
       " · งวด " +
       ymLabel(c.month) +
-      (real ? " · ชื่อเล่น " + c.name : "") +
-      (c.note ? " · " + c.note : ""),
+      (c.note ? "\n📝 " + c.note : ""),
     fields: [
       {
-        name: "ยอดสะสมตอนนี้",
+        name: "ของ " + c.name + " (เทียบเป้าตัวเอง)",
         value:
-          money(saved, goal.currency) +
+          money(personSaved, goal.currency) +
           " / " +
-          money(target, goal.currency) +
+          money(perPersonTarget, goal.currency) +
           " (" +
           pct +
-          "%)",
+          "%)" +
+          (pct >= 100 ? " · ครบแล้ว 🎉" : ""),
       },
     ],
     footer: { text: "เป้าเงิน" },
     timestamp: new Date().toISOString(),
   };
   if (slipUrl) embed.image = { url: slipUrl };
-  await post({ embeds: [embed] }, "savings"); // → ห้องประวัติออมเงิน
+  // username + avatar_url = โปรไฟล์คนโอน (โชว์เป็นหัวข้อความเหมือนคนนั้นส่งเอง)
+  await post(
+    { username: disp, avatar_url: avatarUrl, embeds: [embed] },
+    "savings",
+  );
 }
 
 /**
